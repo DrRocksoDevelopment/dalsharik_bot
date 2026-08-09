@@ -4,7 +4,7 @@ import type { DataStore } from '../storage/data-store.js';
 import type { PollAnswer } from '@telegraf/types';
 import { MESSAGES } from '../content/messages.js';
 import { formatLocalTime, formatRelativeDuration } from '../utils/timezone.js';
-import { isChatAdminOrSuper } from './permissions.js';
+import { isChatAdminOrSuper, resolveHelpRole } from './permissions.js';
 import { registerConfigCommands } from './config-commands.js';
 import { registerStatsCommands } from './stats-commands.js';
 import { getOrCreateChat, isGroupChat, normalizeChatConfig } from './chat-utils.js';
@@ -88,7 +88,8 @@ export function createBot(token: string, deps: BotDeps, botInstance?: Telegraf):
   });
 
   bot.command('help', async (ctx) => {
-    await ctx.reply(MESSAGES.help(ctx.botInfo?.first_name ?? 'Дальшарик'));
+    const role = await resolveHelpRole(ctx, deps.adminId, deps.logger);
+    await ctx.reply(MESSAGES.help(ctx.botInfo?.first_name ?? 'Дальшарик', role));
   });
 
   bot.command('stop', async (ctx) => {

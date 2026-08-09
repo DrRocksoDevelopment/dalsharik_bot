@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Context } from 'telegraf';
-import { isChatAdminOrSuper } from '../src/bot/permissions.js';
+import { isChatAdminOrSuper, resolveHelpRole } from '../src/bot/permissions.js';
 
 function makeCtx(overrides: Record<string, unknown>): Context {
   return overrides as unknown as Context;
@@ -76,5 +76,47 @@ describe('isChatAdminOrSuper', () => {
       },
     });
     expect(await isChatAdminOrSuper(ctx, SUPER)).toBe(false);
+  });
+});
+
+describe('resolveHelpRole', () => {
+  const SUPER = 111;
+
+  it('суперадмин получает роль super', async () => {
+    const ctx = makeCtx({ from: { id: SUPER } });
+    expect(await resolveHelpRole(ctx, SUPER)).toBe('super');
+  });
+
+  it('администратор группы без суперадмина получает admin', async () => {
+    const ctx = makeCtx({
+      from: { id: 222 },
+      chat: { id: -100, type: 'supergroup' },
+      getChatAdministrators: async () => [
+        { user: { id: 222 }, status: 'administrator' },
+      ],
+    });
+    expect(await resolveHelpRole(ctx, SUPER)).toBe('admin');
+  });
+
+  it('обычный участник получает user', async () => {
+    const ctx = makeCtx({
+      from: { id: 222 },
+      chat: { id: -100, type: 'supergroup' },
+      getChatAdministrators: async () => [
+        { user: { id: 111 }, status: 'creator' },
+      ],
+    });
+    expect(await resolveHelpRole(ctx, SUPER)).toBe('user');
+  });
+
+  it('в приватном чате без суперадмина получает user', async () => {
+    const ctx = makeCtx({
+      from: { id: 222 },
+      chat: { id: 123, type: 'private' },
+      getChatAdministrators: async () => [
+        { user: { id: 222 }, status: 'administrator' },
+      ],
+    });
+    expect(await resolveHelpRole(ctx, SUPER)).toBe('user');
   });
 });

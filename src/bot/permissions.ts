@@ -1,6 +1,7 @@
 import type { Context } from 'telegraf';
 import type { Logger } from 'winston';
 import { isGroupChat } from './chat-utils.js';
+import type { HelpRole } from '../content/messages.js';
 
 export async function isChatAdminOrSuper(
   ctx: Context,
@@ -23,4 +24,14 @@ export async function isChatAdminOrSuper(
     });
     return false;
   }
+}
+
+export async function resolveHelpRole(
+  ctx: Context,
+  superAdminId: number | null,
+  logger?: Logger,
+): Promise<HelpRole> {
+  if (superAdminId !== null && ctx.from?.id === superAdminId) return 'super';
+  if (await isChatAdminOrSuper(ctx, null, logger)) return 'admin';
+  return 'user';
 }

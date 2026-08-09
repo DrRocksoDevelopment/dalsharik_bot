@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBot } from '../src/bot/bot.js';
 import { MESSAGES } from '../src/content/messages.js';
+import { Telegram } from 'telegraf';
 import { makeBotHarness, makeChatRecord, makeLogger, commandUpdate, type BotHarness } from './helpers.js';
 
 const ADMIN_ID = 42;
@@ -79,6 +80,57 @@ describe('bot', () => {
     await h.bot.handleUpdate(commandUpdate('/help'));
     expect(lastReply(h)).toContain('/help');
     expect(lastReply(h)).toContain('/stats');
+  });
+
+  it('/help суперадмину показывает все разделы', async () => {
+    h = await makeBotHarness();
+    createBot('test:token', { logger: makeLogger(), store: h.store, adminId: ADMIN_ID }, h.bot);
+    await h.bot.handleUpdate(commandUpdate('/help', { fromId: ADMIN_ID }));
+    const text = lastReply(h);
+    expect(text).toContain('/top');
+    expect(text).toContain('/start');
+    expect(text).toContain('/generate');
+    expect(text).toContain('/config');
+    expect(text).toContain('/set_ai_key');
+  });
+
+  it('/help админу группы показывает только пользовательские и админские команды', async () => {
+    h = await makeBotHarness();
+    createBot('test:token', { logger: makeLogger(), store: h.store, adminId: ADMIN_ID }, h.bot);
+    vi.mocked(Telegram.prototype.callApi).mockImplementation(((
+      method: string,
+      payload: Record<string, unknown>,
+    ) => {
+      if (method === 'getChatAdministrators') {
+        return Promise.resolve([{ user: { id: 999, is_bot: false, first_name: 'Admin' }, status: 'administrator' }]);
+      }
+      if (method === 'sendMessage') {
+        h.sendMessage(payload.chat_id, payload.text, payload);
+        return Promise.resolve({ message_id: 1 });
+      }
+      return Promise.resolve({});
+    }) as never);
+
+    await h.bot.handleUpdate(commandUpdate('/help', { fromId: 999 }));
+    const text = lastReply(h);
+    expect(text).toContain('/top');
+    expect(text).toContain('/start');
+    expect(text).toContain('/set_timezone');
+    expect(text).not.toContain('/generate');
+    expect(text).not.toContain('/config');
+    expect(text).not.toContain('/metrics');
+  });
+
+  it('/help обычному юзеру показывает только пользовательские команды', async () => {
+    h = await makeBotHarness();
+    createBot('test:token', { logger: makeLogger(), store: h.store, adminId: ADMIN_ID }, h.bot);
+    await h.bot.handleUpdate(commandUpdate('/help', { fromId: 999 }));
+    const text = lastReply(h);
+    expect(text).toContain('/top');
+    expect(text).toContain('/stats');
+    expect(text).not.toContain('/start');
+    expect(text).not.toContain('/set_timezone');
+    expect(text).not.toContain('/generate');
   });
 
   it('/config доступен только суперадмину', async () => {
