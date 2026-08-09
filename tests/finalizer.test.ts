@@ -5,6 +5,7 @@ import { buildResultsMessage } from '../src/content/results.js';
 import { calculateResults } from '../src/game/stats.js';
 import { makeLogger, makePoll, makeQuestion, makeTempStore, type TempStore } from './helpers.js';
 import type { AnswerRecord } from '../src/game/answer.js';
+import type { UserProfile } from '../src/game/user.js';
 
 const tempStores: TempStore[] = [];
 
@@ -120,5 +121,67 @@ describe('results message', () => {
     expect(text).toContain('10.0 сек');
     expect(text).toContain('Варианты:');
     expect(text).toContain('«История решила иначе.»');
+  });
+
+  it('содержит серии и рекорд чата при наличии highlight', () => {
+    const question = makeQuestion();
+    const results = calculateResults([
+      {
+        id: 'r1',
+        userId: '1',
+        chatId: '-100123',
+        questionId: 'event_000001',
+        telegramPollId: 'telegram-poll-1',
+        selectedOption: 'C',
+        isCorrect: true,
+        answeredAt: '2026-01-01T00:00:10.000Z',
+        reactionTimeMs: 10_000,
+        points: 3,
+        isRepeat: false,
+        updateId: 1,
+      },
+    ]);
+
+    const ivan: UserProfile = {
+      id: '1',
+      username: 'ivan',
+      score: 10,
+      currentStreak: 6,
+      bestStreak: 7,
+      streakMultiplier: 1.6,
+      gamesPlayed: 1,
+      answers: 1,
+      correct: 1,
+      wrong: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:10.000Z',
+    };
+    const text = buildResultsMessage({
+      question,
+      results,
+      users: new Map([['1', ivan]]),
+      slogan: '«История решила иначе.»',
+      streakHighlights: [{ userId: '1', currentStreak: 6 }],
+      chatStreakRecord: 7,
+    });
+
+    expect(text).toContain('🔥 Серии');
+    expect(text).toContain('@ivan — 6');
+    expect(text).toContain('до рекорда чата (7) ещё 1');
+  });
+
+  it('содержит превью следующего события', () => {
+    const question = makeQuestion();
+    const results = calculateResults([]);
+
+    const text = buildResultsMessage({
+      question,
+      results,
+      users: new Map(),
+      slogan: '«История решила иначе.»',
+      nextEventLocalTime: '15:00',
+    });
+
+    expect(text).toContain('⏭ Следующее событие — в 15:00 по местному времени');
   });
 });

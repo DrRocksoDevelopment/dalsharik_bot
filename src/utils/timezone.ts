@@ -17,3 +17,10 @@ export function formatTimezoneOffset(offsetMinutes: number): string {
   const minutes = abs % 60;
   return minutes === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${String(minutes).padStart(2, '0')}`;
 }
+
+export function formatLocalTime(nowMs: number, offsetMinutes: number): string {
+  const localMinutes = (((Math.floor(nowMs / 60000) % 1440) + offsetMinutes) % 1440 + 1440) % 1440;
+  const hours = Math.floor(localMinutes / 60);
+  const minutes = localMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}

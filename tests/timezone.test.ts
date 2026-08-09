@@ -6,7 +6,7 @@ import {
   localHourFromUtc,
   normalizeOffsetMinutes,
 } from '../src/game/time-of-day.js';
-import { formatTimezoneOffset, parseTimezoneOffset } from '../src/utils/timezone.js';
+import { formatTimezoneOffset, formatLocalTime, parseTimezoneOffset } from '../src/utils/timezone.js';
 
 describe('parseTimezoneOffset', () => {
   it('парсит часы со знаком', () => {
@@ -43,6 +43,15 @@ describe('formatTimezoneOffset', () => {
     expect(formatTimezoneOffset(-300)).toBe('UTC-5');
     expect(formatTimezoneOffset(330)).toBe('UTC+5:30');
     expect(formatTimezoneOffset(0)).toBe('UTC+0');
+  });
+
+  it('форматирует локальное время по смещению', () => {
+    const utc = Date.parse('2026-08-09T12:00:00.000Z');
+    expect(formatLocalTime(utc, 180)).toBe('15:00');
+    expect(formatLocalTime(utc, 0)).toBe('12:00');
+    expect(formatLocalTime(utc, -300)).toBe('07:00');
+    expect(formatLocalTime(utc, -720)).toBe('00:00');
+    expect(formatLocalTime(utc, 780)).toBe('01:00');
   });
 });
 

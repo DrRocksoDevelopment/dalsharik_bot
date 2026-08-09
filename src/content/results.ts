@@ -10,17 +10,25 @@ const OPTION_EMOJI: Record<string, string> = {
   D: '🅳',
 };
 
+function displayName(user: UserProfile | undefined, userId: string): string {
+  if (!user) return `@${userId}`;
+  if (user.username) return `@${user.username}`;
+  return user.firstName ?? `@${userId}`;
+}
+
+export interface StreakHighlight {
+  userId: string;
+  currentStreak: number;
+}
+
 export interface ResultsContext {
   question: Question;
   results: QuestionResults;
   users: Map<string, UserProfile>;
   slogan: string;
-}
-
-function displayName(user: UserProfile | undefined, userId: string): string {
-  if (!user) return `@${userId}`;
-  if (user.username) return `@${user.username}`;
-  return user.firstName ?? `@${userId}`;
+  streakHighlights?: StreakHighlight[];
+  chatStreakRecord?: number | null;
+  nextEventLocalTime?: string;
 }
 
 function formatDistribution(results: QuestionResults, question: Question): string {
@@ -38,6 +46,26 @@ function formatTopPlayers(results: QuestionResults, users: Map<string, UserProfi
     return `${displayName(users.get(p.userId), p.userId)} +${p.points}`;
   });
   return `🏆 За этот вопрос\n${lines.join('\n')}\n`;
+}
+
+function formatStreaks(
+  highlights: StreakHighlight[],
+  chatStreakRecord: number | null,
+  users: Map<string, UserProfile>,
+): string {
+  if (highlights.length === 0) return '';
+  const lines = highlights.map((h) => {
+    let line = `${displayName(users.get(h.userId), h.userId)} — ${h.currentStreak}`;
+    if (
+      chatStreakRecord !== null &&
+      h.currentStreak < chatStreakRecord &&
+      h.currentStreak + 1 >= chatStreakRecord
+    ) {
+      line += ` · до рекорда чата (${chatStreakRecord}) ещё ${chatStreakRecord - h.currentStreak}`;
+    }
+    return line;
+  });
+  return `🔥 Серии\n${lines.join('\n')}\n`;
 }
 
 export function buildResultsMessage(context: ResultsContext): string {
@@ -71,6 +99,12 @@ export function buildResultsMessage(context: ResultsContext): string {
     parts.push('');
   }
 
+  const streaks = formatStreaks(context.streakHighlights ?? [], context.chatStreakRecord ?? null, users);
+  if (streaks) {
+    parts.push(streaks);
+    parts.push('');
+  }
+
   parts.push('📖 А на самом деле...');
   parts.push('');
   parts.push(question.explanation);
@@ -82,6 +116,11 @@ export function buildResultsMessage(context: ResultsContext): string {
   }
 
   parts.push(slogan);
+
+  if (context.nextEventLocalTime) {
+    parts.push('');
+    parts.push(`⏭ Следующее событие — в ${context.nextEventLocalTime} по местному времени`);
+  }
 
   return parts.join('\n');
 }

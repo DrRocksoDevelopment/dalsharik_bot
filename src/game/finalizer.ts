@@ -6,6 +6,9 @@ import { buildResultsMessage } from '../content/results.js';
 import { SloganEngine, type SloganContext } from '../content/slogans.js';
 import type { FinalizerSender } from '../telegram/finalizer-sender.js';
 import type { MetricsStore } from '../metrics/metrics.js';
+import { formatLocalTime } from '../utils/timezone.js';
+
+const STREAK_HIGHLIGHT_MIN = 2;
 
 export interface QuestionFinalizerDeps {
   logger: Logger;
@@ -64,6 +67,24 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
     const users = new Map<string, import('./user.js').UserProfile>();
     for (const u of await this.deps.store.users.getAll()) users.set(u.id, u);
 
+    const streakHighlights = [...new Set(answers.map((a) => a.userId))]
+      .map((userId) => ({ userId, currentStreak: users.get(userId)?.currentStreak ?? 0 }))
+      .filter((h) => h.currentStreak >= STREAK_HIGHLIGHT_MIN)
+      .sort((a, b) => b.currentStreak - a.currentStreak);
+
+    let chatStreakRecord: number | null = null;
+    const chatAnswerers = await this.deps.store.answers.find((a) => a.chatId === poll.chatId);
+    for (const id of new Set(chatAnswerers.map((a) => a.userId))) {
+      const best = users.get(id)?.bestStreak ?? 0;
+      if (chatStreakRecord === null || best > chatStreakRecord) chatStreakRecord = best;
+    }
+
+    const chat = await this.deps.store.chats.get(poll.chatId);
+    const now = (this.deps.now ?? Date.now)();
+    const nextEventLocalTime = chat
+      ? formatLocalTime(now + chat.questionInterval * 1000, chat.timezoneOffsetMinutes)
+      : undefined;
+
     const slogan = (this.deps.slogans ?? new SloganEngine()).get({
       isCorrect: results.correct > 0,
       playersCount: results.totalPlayers,
@@ -72,7 +93,15 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       difficulty: question.difficulty,
     } satisfies SloganContext);
 
-    const message = buildResultsMessage({ question, results, users, slogan });
+    const message = buildResultsMessage({
+      question,
+      results,
+      users,
+      slogan,
+      streakHighlights,
+      chatStreakRecord,
+      nextEventLocalTime,
+    });
 
     try {
       await this.deps.sender.sendMessage(poll.chatId, message);
