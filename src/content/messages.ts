@@ -36,7 +36,14 @@ export const MESSAGES = {
     }
     if (role === 'super') {
       sections.push(
-        '📦 Суперадмин: /import (импорт из папки data/imports), отправка JSON-файла в ЛС — импорт в пул, /pending — модерация, /config — конфигурация чата, /metrics — метрики бота, /generate — генерация вопросов ИИ (OpenRouter), /set_ai_key, /set_ai_model, /ai_status — настройка ИИ',
+        '📦 Суперадмин:\n' +
+          '/import — импорт из папки data/imports\n' +
+          'Отправка JSON-файла в ЛС — импорт в пул\n' +
+          '/pending — модерация\n' +
+          '/config — конфигурация чата\n' +
+          '/metrics — метрики бота\n' +
+          '/generate — генерация вопросов ИИ (OpenRouter)\n' +
+          '/set_ai_key, /set_ai_model, /ai_status — настройка ИИ',
       );
     }
     return `📖 Команды *${botName}*:\n\n${sections.join('\n\n')}`;
