@@ -18,6 +18,17 @@ export interface QuestionReloaderDeps {
 
 export type ModerationResult = { ok: boolean; reason?: string };
 
+export interface QuestionImportError {
+  id: string;
+  errors: string[];
+}
+
+export interface QuestionImportResult {
+  imported: number;
+  skipped: { id: string; reason: string }[];
+  errors: QuestionImportError[];
+}
+
 export class QuestionReloader {
   private readonly questionsFile: string;
   private readonly backupFile: string;
@@ -103,6 +114,58 @@ export class QuestionReloader {
     await this.deps.store.questionNotifications.delete(questionId);
     this.deps.logger.info('Вопрос отклонён', { questionId });
     return { ok: true };
+  }
+
+  async importQuestions(input: Question[]): Promise<QuestionImportResult> {
+    const result: QuestionImportResult = { imported: 0, skipped: [], errors: [] };
+    const current = await this.deps.store.questions.getAll();
+    const currentIds = new Set(current.map((q) => q.id));
+    const seenInBatch = new Set<string>();
+    const accepted: Question[] = [];
+
+    for (const q of input) {
+      if (typeof q !== 'object' || q === null) {
+        result.errors.push({ id: '(без id)', errors: ['не объект'] });
+        continue;
+      }
+      const id = q.id;
+      if (!id || typeof id !== 'string') {
+        result.errors.push({ id: '(без id)', errors: ['нет id'] });
+        continue;
+      }
+      const validationErrors = validateQuestion(q);
+      if (validationErrors.length > 0) {
+        result.errors.push({ id, errors: validationErrors });
+        continue;
+      }
+      if (currentIds.has(id)) {
+        result.skipped.push({ id, reason: 'id уже есть в активном пуле' });
+        continue;
+      }
+      if (seenInBatch.has(id)) {
+        result.skipped.push({ id, reason: 'дубликат id внутри файла' });
+        continue;
+      }
+      seenInBatch.add(id);
+      accepted.push({ ...q, createdAt: q.createdAt ?? new Date().toISOString() });
+    }
+
+    if (accepted.length === 0) return result;
+
+    const next = [...current, ...accepted];
+    const setErrors = validateQuestionSet(next);
+    if (setErrors.length > 0) {
+      this.deps.logger.warn('Импорт отклонён: вопросы не прошли общую валидацию', {
+        errors: setErrors.slice(0, 10),
+      });
+      result.errors.push({ id: '(весь файл)', errors: setErrors });
+      return result;
+    }
+
+    await this.applyPool(next);
+    result.imported = accepted.length;
+    this.deps.logger.info('Импортированы вопросы', { count: accepted.length });
+    return result;
   }
 
   private async applyPool(next: Question[]): Promise<void> {

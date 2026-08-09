@@ -18,6 +18,7 @@ import {
   buildQuestionReviewKeyboard,
   registerModeration,
 } from './bot/moderation-commands.js';
+import { registerImport } from './bot/import-commands.js';
 
 export async function main(): Promise<void> {
   const store = createDataStore();
@@ -77,6 +78,12 @@ export async function main(): Promise<void> {
   });
 
   registerModeration(bot, {
+    logger,
+    adminId: env.botAdminId,
+    reloader,
+  });
+
+  registerImport(bot, {
     logger,
     adminId: env.botAdminId,
     reloader,

@@ -155,3 +155,70 @@ describe('question reloader', () => {
     expect(await t.store.questionNotifications.get('event_000002')).toBeNull();
   });
 });
+
+describe('question reloader: import', () => {
+  it('добавляет валидные вопросы в пул и движок, заполняя createdAt', async () => {
+    const { t, engine, reloader } = await setup();
+    const result = await reloader.importQuestions([
+      makeQuestion({ id: 'event_000002', question: 'Вопрос номер два?' }),
+      makeQuestion({
+        id: 'event_000010',
+        question: 'Вопрос номер десять?',
+        createdAt: undefined as unknown as string,
+      }),
+    ]);
+
+    expect(result.imported).toBe(2);
+    expect(result.skipped).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+
+    const active = await t.store.questions.getAll();
+    expect(active.map((q) => q.id).sort()).toEqual(['event_000002', 'event_000010']);
+    expect(active.every((q) => typeof q.createdAt === 'string' && q.createdAt.length > 0)).toBe(true);
+
+    const pool = await engine.selectNext({ ...NEXT_OPTS, excludeQuestionIds: [] });
+    expect(['event_000002', 'event_000010']).toContain(pool?.id);
+  });
+
+  it('пропускает вопросы с id из активного пула', async () => {
+    const { t, reloader } = await setup();
+    await writeJson(t.dir, 'questions.json', [makeQuestion()]);
+    await reloader.refresh();
+
+    const result = await reloader.importQuestions([
+      makeQuestion({ id: 'event_000001', question: 'Другой текст?' }),
+    ]);
+    expect(result.imported).toBe(0);
+    expect(result.skipped).toEqual([
+      { id: 'event_000001', reason: 'id уже есть в активном пуле' },
+    ]);
+    expect(await t.store.questions.getAll()).toHaveLength(1);
+  });
+
+  it('не добавляет невалидные вопросы', async () => {
+    const { t, reloader } = await setup();
+    const result = await reloader.importQuestions([makeQuestion({ difficulty: 99 })]);
+
+    expect(result.imported).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]?.id).toBe('event_000001');
+    expect(await t.store.questions.getAll()).toHaveLength(0);
+  });
+
+  it('частично импортирует валидные из смешанного файла', async () => {
+    const { t, reloader } = await setup();
+    const result = await reloader.importQuestions([
+      makeQuestion({ id: 'event_000001', question: 'Вопрос 1?' }),
+      makeQuestion({ id: 'event_000002', question: 'Вопрос 2?', difficulty: 99 }),
+      makeQuestion({ id: 'event_000003', question: 'Вопрос 3?' }),
+      makeQuestion({ id: 'event_000001', question: 'Дубликат 1?' }),
+    ]);
+
+    expect(result.imported).toBe(2);
+    expect(result.skipped.map((s) => s.id)).toEqual(['event_000001']);
+    expect(result.errors.map((e) => e.id)).toEqual(['event_000002']);
+
+    const active = await t.store.questions.getAll();
+    expect(active.map((q) => q.id).sort()).toEqual(['event_000001', 'event_000003']);
+  });
+});

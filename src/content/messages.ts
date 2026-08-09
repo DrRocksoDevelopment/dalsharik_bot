@@ -25,7 +25,8 @@ export const MESSAGES = {
     `/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)\n` +
     `/top — рейтинг группы\n` +
     `/top_global — общий рейтинг\n` +
-    `/stats — твоя статистика`,
+    `/stats — твоя статистика\n\n` +
+    `📦 Админ: отправьте боту JSON-файл с вопросами — импорт в пул (в ЛС)`,
   stop: '⏹ Игра в этой группе остановлена.',
   enabled: '✅ Бот включён.',
   config: (cfg: Record<string, unknown>) => `<pre>${JSON.stringify(cfg, null, 2)}</pre>`,
@@ -66,6 +67,26 @@ export const MESSAGES = {
     `Источники: ${q.sources.join(', ')}`,
   approved: '✅ Вопрос одобрен и добавлен в пул.',
   rejected: '🚫 Вопрос отклонён.',
+  importPrivateOnly: 'ℹ️ Импорт вопросов работает только в личных сообщениях бота.',
+  importFileTooLarge: '❌ Файл слишком большой (максимум 5 МБ).',
+  importInvalidJson: (reason: string) => `❌ Не удалось разобрать файл: ${reason}`,
+  importError: '❌ Ошибка при импорте вопросов. Попробуйте ещё раз.',
+  importResult: (r: {
+    imported: number;
+    skipped: { id: string; reason: string }[];
+    errors: { id: string; errors: string[] }[];
+  }) => {
+    const lines = [
+      `📦 Импорт завершён:`,
+      `✅ Импортировано: ${r.imported}`,
+      `⏭ Пропущено: ${r.skipped.length}`,
+    ];
+    const skipped = r.skipped.slice(0, 10).map((s) => `• ${s.id} — ${s.reason}`);
+    if (skipped.length > 0) lines.push(`Пропущенные:\n${skipped.join('\n')}`);
+    const errors = r.errors.slice(0, 10).map((e) => `• ${e.id}: ${e.errors.join('; ')}`);
+    if (errors.length > 0) lines.push(`Ошибки:\n${errors.join('\n')}`);
+    return lines.join('\n');
+  },
   noTop: 'Рейтинг пуст. Отвечайте на вопросы, чтобы попасть в топ.',
   noStats: 'У тебя пока нет статистики. Ответь на первый вопрос!',
   topMessage: (title: string, entries: Array<{ name: string; score: number; streak: number }>) => {
