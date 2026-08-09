@@ -4,6 +4,7 @@ import type { DataStore } from '../storage/data-store.js';
 import type { PollAnswer } from '@telegraf/types';
 import { MESSAGES } from '../content/messages.js';
 import { registerConfigCommands } from './config-commands.js';
+import { registerStatsCommands } from './stats-commands.js';
 import { getOrCreateChat, isGroupChat } from './chat-utils.js';
 
 export interface BotDeps {
@@ -29,6 +30,7 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
   });
 
   registerConfigCommands(bot, deps);
+  registerStatsCommands(bot, deps);
 
   if (deps.pollAnswerHandler) {
     bot.on('poll_answer', async (ctx, next) => {

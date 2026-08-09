@@ -22,7 +22,10 @@ export const MESSAGES = {
     `/set_interval <сек> — интервал между вопросами (мин 60)\n` +
     `/set_types <тип1,тип2> — типы вопросов\n` +
     `/set_difficulty <мин> <макс> — диапазон сложности 1–5\n` +
-    `/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)`,
+    `/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)\n` +
+    `/top — рейтинг группы\n` +
+    `/top_global — общий рейтинг\n` +
+    `/stats — твоя статистика`,
   stop: '⏹ Игра в этой группе остановлена.',
   enabled: '✅ Бот включён.',
   config: (cfg: Record<string, unknown>) => `<pre>${JSON.stringify(cfg, null, 2)}</pre>`,
@@ -63,7 +66,49 @@ export const MESSAGES = {
     `Источники: ${q.sources.join(', ')}`,
   approved: '✅ Вопрос одобрен и добавлен в пул.',
   rejected: '🚫 Вопрос отклонён.',
+  noTop: 'Рейтинг пуст. Отвечайте на вопросы, чтобы попасть в топ.',
+  noStats: 'У тебя пока нет статистики. Ответь на первый вопрос!',
+  topMessage: (title: string, entries: Array<{ name: string; score: number; streak: number }>) => {
+    const medals = ['🥇', '🥈', '🥉'];
+    const rows = entries.map((e, i) => {
+      const medal = i < 3 ? `${medals[i] ?? ''} ` : '';
+      const streak = e.streak > 1 ? ` · 🔥${e.streak}` : '';
+      return `${medal}${e.name} — ${e.score} очков${streak}`;
+    });
+    return `${title}\n${rows.join('\n')}`;
+  },
+  statsMessage: (s: {
+    answers: number;
+    correct: number;
+    wrong: number;
+    accuracy: number;
+    averageReactionMs: number;
+    medianReactionMs: number;
+    favoriteCategory: string | null;
+    currentStreak: number;
+    bestStreak: number;
+    score: number;
+  }) =>
+    `📊 *Твоя статистика*\n\n` +
+    `Ответов: ${s.answers} · Точность: ${s.accuracy.toFixed(1)}%\n` +
+    `✅ Правильно: ${s.correct} · ❌ Неверно: ${s.wrong}\n` +
+    `⚡ Средняя реакция: ${formatReactionTime(s.averageReactionMs)} · Медиана: ${formatReactionTime(s.medianReactionMs)}\n` +
+    `🎯 Любимая категория: ${s.favoriteCategory ? categoryLabel(s.favoriteCategory) : '—'}\n` +
+    `🔥 Текущая серия: ${s.currentStreak} · Лучшая: ${s.bestStreak}\n` +
+    `💎 Очков всего: ${s.score}`,
 } as const;
+
+const CATEGORY_LABELS: Record<string, string> = {
+  history: 'История',
+  science: 'Наука',
+  technology: 'Технологии',
+  culture: 'Культура',
+  geography: 'География',
+};
+
+export function categoryLabel(category: string): string {
+  return CATEGORY_LABELS[category] ?? category;
+}
 
 const DIFFICULTY_EMOJI: Record<number, string> = {
   1: '🟢',
