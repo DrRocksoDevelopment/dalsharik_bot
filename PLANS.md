@@ -23,44 +23,44 @@
 
 - [x] **Unhandled rejection** — `bot.launch().then(...)` без `.catch()` (`src/index.ts:108`), нет глобальных `unhandledRejection`/`uncaughtException`, fire-and-forget `void this.reloadPool()`/`tick()`.
   - Фикс: `try/await bot.launch()` с выходом, глобальные хендлеры, `.catch` на fire-and-forget.
-- [ ] **Глухие catch** (`permissions.ts:17`, `import-commands.ts:46`, `lock.ts:36`) — логировать warn/debug.
-- [ ] **`FileLock.acquire` при сбое оставляет блокировку навсегда** — обернуть acquire в try/catch.
-- [ ] **Конфиг-модуль читает env при импорте** (`logging/logger.ts:4`) — ленивая инициализация.
+- [x] **Глухие catch** (`permissions.ts:17`, `import-commands.ts:46`, `lock.ts:36`) — логировать warn/debug.
+- [x] **`FileLock.acquire` при сбое оставляет блокировку навсегда** — обернуть acquire в try/catch.
+- [x] **Конфиг-модуль читает env при импорте** (`logging/logger.ts:4`) — ленивая инициализация (env передаётся параметром в `initLogger`).
 
 ## Производительность
 
 - [ ] Каждый ответ = ~8 полных чтений/перезаписей JSON под локом (индексы в памяти / SQLite).
-- [ ] `/stats` читает questions.json N раз (`leaderboard.ts:81-85`) — один `getAll()` + Map.
+- [x] `/stats` читает questions.json N раз (`leaderboard.ts:81-85`) — один `getAll()` + Map.
 - [ ] Тик планировщика = O(чатов × полных чтений) каждые 30 c — состояние в памяти.
 - [ ] Неограниченный рост `metrics.json`: массивы `chat.players`/`user.question_ids` → счётчики.
-- [ ] Бэкап вопросов перезаписывается каждые 60 c без изменений — только при изменении.
+- [x] Бэкап вопросов перезаписывается каждые 60 c без изменений — только при изменении.
 
 ## Безопасность и типы
 
-- [ ] **HTML-инъекция в `/config`** (`bot.ts:123`, `messages.ts:38`) — экранировать или слать без parse_mode.
+- [x] **HTML-инъекция в `/config`** (`bot.ts:123`, `messages.ts:38`) — экранировать или слать без parse_mode.
 - [ ] Сырой markdown без parse_mode в сообщениях — включить MarkdownV2 с экранированием или убрать разметку.
-- [ ] `asStored` в `metrics-store.ts` без runtime-валидации — нормализация/валидация при чтении.
-- [ ] Лишние поля patch тихо персистятся в `json-storage.ts:87` — валидация ключей.
-- [ ] Рассинхрон: `/config` в `/help` указан «для всех», а реально суперадминский — поправить help.
+- [x] `asStored` в `metrics-store.ts` без runtime-валидации — нормализация/валидация при чтении.
+- [x] Лишние поля patch тихо персистятся в `json-storage.ts:87` — валидация ключей (миграция схемы — через `mutate` в `getOrCreateChat`).
+- [x] Рассинхрон: `/config` в `/help` указан «для всех», а реально суперадминский — поправить help.
 
 ## Зависимости и сборка
 
 - [x] **vitest 2.x → 4.x** — чинит critical/high уязвимости (vite/esbuild/vite-node), dev-only. `npm audit`: 0 уязвимостей. Добавлен `vitest.config.mts` (include только `tests/**/*.test.ts`, чтобы vitest 4 не подхватывал скомпилированные тесты из `dist/`).
 - [x] **`@telegraf/types@^7.1.0` явно в dependencies** (сейчас транзитивно через telegraf).
 - [ ] `lint` = дубль `typecheck` — реальный линтер (eslint) или убрать.
-- [ ] `rootDir: "."` собирает в dist также `tests/` и `scripts/` — поправить.
-- [ ] Удалить легаси `data/stats.json`.
+- [x] `rootDir: "."` собирает в dist также `tests/` и `scripts/` — поправить (уже `rootDir: "src"`).
+- [x] Удалить легаси `data/stats.json` (уже отсутствует).
 
 ## Тесты (добавить)
 
 - [x] Гонка: параллельные `processPollAnswer` одного пользователя.
 - [x] Сбой send-before-persist (после `sendQuiz` до `polls.insert`).
 - [x] `reloader.start()` при отсутствующем dataDir.
-- [ ] `src/bot/bot.ts` (start/stop/help/config/poll_answer/бота.catch).
-- [ ] `config-commands.ts`, `moderation-commands.ts`, `stats-commands.ts`.
-- [ ] `logging/` (rate-limit, обрезка 4000).
-- [ ] `index.ts` (отсутствие env, ошибка launch, graceful shutdown).
-- [ ] Гигиена: `t.cleanup()` в `afterEach` в `scheduler.test.ts`.
+- [x] `src/bot/bot.ts` (start/stop/help/config/poll_answer/бота.catch).
+- [x] `config-commands.ts`, `moderation-commands.ts`, `stats-commands.ts`.
+- [x] `logging/` (rate-limit, обрезка 4000).
+- [x] `index.ts` (отсутствие env, ошибка launch, graceful shutdown).
+- [x] Гигиена: `t.cleanup()` в `afterEach` в `scheduler.test.ts`.
 
 ## Стратегия коммитов
 
