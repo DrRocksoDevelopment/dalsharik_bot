@@ -28,6 +28,8 @@ export interface Scheduler {
   stop(): Promise<void>;
   recover(): Promise<void>;
   scheduleChat(chatId: string): Promise<void>;
+  ensureScheduled(chatId: string): Promise<void>;
+  getNextPublishAt(chatId: string): Promise<number | null>;
 }
 
 const DEFAULT_TICK_INTERVAL_MS = 30_000;
@@ -41,6 +43,7 @@ export class DefaultScheduler implements Scheduler {
   private readonly freshChatDelayMs: number;
   private pollTimers = new Map<string, NodeJS.Timeout>();
   private publishTimers = new Map<string, NodeJS.Timeout>();
+  private publishAt = new Map<string, number>();
   private tickTimer: NodeJS.Timeout | null = null;
   private running = false;
 
@@ -72,6 +75,7 @@ export class DefaultScheduler implements Scheduler {
     for (const t of this.publishTimers.values()) clearTimeout(t);
     this.pollTimers.clear();
     this.publishTimers.clear();
+    this.publishAt.clear();
     this.deps.logger.info('Scheduler остановлен');
   }
 
@@ -102,6 +106,7 @@ export class DefaultScheduler implements Scheduler {
     if (existing) {
       clearTimeout(existing);
       this.publishTimers.delete(chatId);
+      this.publishAt.delete(chatId);
     }
 
     const chat = await this.deps.store.chats.get(chatId);
@@ -113,6 +118,40 @@ export class DefaultScheduler implements Scheduler {
     if (active.length > 0) return;
 
     await this.scheduleNextPublish(chat);
+  }
+
+  async ensureScheduled(chatId: string): Promise<void> {
+    if (!this.running) return;
+    if (this.publishTimers.has(chatId)) return;
+
+    const chat = await this.deps.store.chats.get(chatId);
+    if (!chat?.enabled) return;
+
+    const active = await this.deps.store.polls.find(
+      (p) => p.chatId === chatId && p.status === 'active',
+    );
+    if (active.length > 0) return;
+
+    await this.scheduleNextPublish(chat);
+  }
+
+  async getNextPublishAt(chatId: string): Promise<number | null> {
+    const scheduled = this.publishAt.get(chatId);
+    if (scheduled !== undefined) return scheduled;
+
+    const active = await this.deps.store.polls.find(
+      (p) => p.chatId === chatId && p.status === 'active',
+    );
+    if (active.length > 0) {
+      const chat = await this.deps.store.chats.get(chatId);
+      if (chat) {
+        const expiresAt = Date.parse(active[0]!.expiresAt);
+        if (!Number.isNaN(expiresAt)) {
+          return expiresAt + chat.questionInterval * 1000;
+        }
+      }
+    }
+    return null;
   }
 
   private async tick(): Promise<void> {
@@ -146,12 +185,15 @@ export class DefaultScheduler implements Scheduler {
       }
     }
 
+    const publishAtMs = this.now() + delayMs;
     const timer = setTimeout(() => {
       this.publishTimers.delete(chat.chatId);
+      this.publishAt.delete(chat.chatId);
       void this.runPublish(chat);
     }, delayMs);
     if (typeof timer.unref === 'function') timer.unref();
     this.publishTimers.set(chat.chatId, timer);
+    this.publishAt.set(chat.chatId, publishAtMs);
   }
 
   private async runPublish(chat: ChatConfig): Promise<void> {

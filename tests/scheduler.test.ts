@@ -216,4 +216,129 @@ describe('scheduler', () => {
     await scheduler.stop();
     await t.cleanup();
   });
+
+  it('getNextPublishAt возвращает время публикации по таймеру', async () => {
+    const t = await makeTempStore();
+    await t.store.chats.insert(makeChat('-100123'));
+    const { publisher } = makePublisher(t.store, []);
+    const { finalizer } = makeFinalizer(t.store);
+
+    const now = 1_000_000;
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      now: () => now,
+      freshChatDelayMs: 3_600_000,
+    });
+    await scheduler.start();
+    await scheduler.scheduleChat('-100123');
+
+    expect(await scheduler.getNextPublishAt('-100123')).toBe(now + 3_600_000);
+
+    await scheduler.stop();
+    await t.cleanup();
+  });
+
+  it('ensureScheduled не пересоздаёт существующий таймер', async () => {
+    const t = await makeTempStore();
+    await t.store.chats.insert(makeChat('-100123'));
+    const { publisher } = makePublisher(t.store, []);
+    const { finalizer } = makeFinalizer(t.store);
+
+    const now = 1_000_000;
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      now: () => now,
+      freshChatDelayMs: 3_600_000,
+    });
+    await scheduler.start();
+    await scheduler.scheduleChat('-100123');
+
+    const before = await scheduler.getNextPublishAt('-100123');
+    await scheduler.ensureScheduled('-100123');
+    const after = await scheduler.getNextPublishAt('-100123');
+
+    expect(after).toBe(before);
+    expect(scheduler.getTimersInfo().publishTimers).toBe(1);
+
+    await scheduler.stop();
+    await t.cleanup();
+  });
+
+  it('ensureScheduled создаёт таймер, если его нет', async () => {
+    const t = await makeTempStore();
+    await t.store.chats.insert(makeChat('-100123', { enabled: false }));
+    const { publisher } = makePublisher(t.store, []);
+    const { finalizer } = makeFinalizer(t.store);
+
+    const now = 1_000_000;
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      now: () => now,
+      freshChatDelayMs: 3_600_000,
+    });
+    await scheduler.start();
+
+    expect(await scheduler.getNextPublishAt('-100123')).toBeNull();
+    await t.store.chats.update('-100123', { enabled: true });
+    await scheduler.ensureScheduled('-100123');
+
+    expect(await scheduler.getNextPublishAt('-100123')).toBe(now + 3_600_000);
+    expect(scheduler.getTimersInfo().publishTimers).toBe(1);
+
+    await scheduler.stop();
+    await t.cleanup();
+  });
+
+  it('getNextPublishAt при активном опросе возвращает expiresAt + интервал', async () => {
+    const t = await makeTempStore();
+    await t.store.chats.insert(makeChat('-100123'));
+    await t.store.polls.insert(makeActivePoll('-100123', { id: 'p', expiresInMs: 60_000 }));
+    const { publisher } = makePublisher(t.store, []);
+    const { finalizer } = makeFinalizer(t.store);
+
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      now: () => Date.now(),
+    });
+    await scheduler.start();
+
+    const poll = (await t.store.polls.get('p'))!;
+    expect(await scheduler.getNextPublishAt('-100123')).toBe(Date.parse(poll.expiresAt) + 7200 * 1000);
+
+    await scheduler.stop();
+    await t.cleanup();
+  });
+
+  it('getNextPublishAt возвращает null для отключённого чата', async () => {
+    const t = await makeTempStore();
+    await t.store.chats.insert(makeChat('-100123', { enabled: false }));
+    const { publisher } = makePublisher(t.store, []);
+    const { finalizer } = makeFinalizer(t.store);
+
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      freshChatDelayMs: 3_600_000,
+    });
+    await scheduler.start();
+
+    expect(await scheduler.getNextPublishAt('-100123')).toBeNull();
+
+    await scheduler.stop();
+    await t.cleanup();
+  });
 });

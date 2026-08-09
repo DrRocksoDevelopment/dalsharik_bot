@@ -28,6 +28,10 @@ export const MESSAGES = {
     `/stats — твоя статистика\n\n` +
     `📦 Админ: отправьте боту JSON-файл с вопросами — импорт в пул (в ЛС)`,
   stop: '⏹ Игра в этой группе остановлена.',
+  alreadyStarted: (time?: string, until?: string) =>
+    time && until
+      ? `ℹ️ Всё по плану, работаем! ⏭ Следующий вопрос — в ${time} (через ~${until}) по местному времени.`
+      : 'ℹ️ Всё по плану, работаем! Следующий вопрос появится по расписанию.',
   enabled: '✅ Бот включён.',
   config: (cfg: Record<string, unknown>) => `<pre>${JSON.stringify(cfg, null, 2)}</pre>`,
   configUpdated: (field: string, value: string) =>

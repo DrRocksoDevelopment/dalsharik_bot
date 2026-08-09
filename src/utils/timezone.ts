@@ -24,3 +24,12 @@ export function formatLocalTime(nowMs: number, offsetMinutes: number): string {
   const minutes = localMinutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
+
+export function formatRelativeDuration(ms: number): string {
+  if (ms < 60_000) return 'меньше минуты';
+  const totalMinutes = Math.floor(ms / 60_000);
+  if (totalMinutes < 60) return `${totalMinutes} мин`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours} ч` : `${hours} ч ${minutes} мин`;
+}

@@ -6,7 +6,7 @@ import {
   localHourFromUtc,
   normalizeOffsetMinutes,
 } from '../src/game/time-of-day.js';
-import { formatTimezoneOffset, formatLocalTime, parseTimezoneOffset } from '../src/utils/timezone.js';
+import { formatTimezoneOffset, formatLocalTime, parseTimezoneOffset, formatRelativeDuration } from '../src/utils/timezone.js';
 
 describe('parseTimezoneOffset', () => {
   it('парсит часы со знаком', () => {
@@ -86,5 +86,23 @@ describe('time of day', () => {
     const utcMorning = Date.parse('2026-08-09T05:00:00.000Z');
     expect(effectiveDifficultyRange(utcMorning, 180, 1, 5)).toEqual({ min: 1, max: 2 });
     expect(effectiveDifficultyRange(utcMorning, 180, 4, 5)).toEqual({ min: 4, max: 5 });
+  });
+});
+
+describe('formatRelativeDuration', () => {
+  it('меньше минуты', () => {
+    expect(formatRelativeDuration(0)).toBe('меньше минуты');
+    expect(formatRelativeDuration(59_999)).toBe('меньше минуты');
+  });
+
+  it('минуты', () => {
+    expect(formatRelativeDuration(60_000)).toBe('1 мин');
+    expect(formatRelativeDuration(45 * 60_000)).toBe('45 мин');
+  });
+
+  it('часы и минуты', () => {
+    expect(formatRelativeDuration(60 * 60_000)).toBe('1 ч');
+    expect(formatRelativeDuration(2 * 60 * 60_000)).toBe('2 ч');
+    expect(formatRelativeDuration(2 * 60 * 60_000 + 5 * 60_000)).toBe('2 ч 5 мин');
   });
 });

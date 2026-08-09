@@ -39,6 +39,8 @@ export async function main(): Promise<void> {
     pollAnswerHandler: (pollAnswer, updateId) =>
       processPollAnswer(pollAnswer, updateId, { logger, store, metrics }),
     onChatChanged: (chatId) => scheduler?.scheduleChat(chatId) ?? Promise.resolve(),
+    ensureScheduled: (chatId) => scheduler?.ensureScheduled(chatId) ?? Promise.resolve(),
+    nextPublishAt: (chatId) => scheduler?.getNextPublishAt(chatId) ?? Promise.resolve(null),
   });
 
   const questions = await store.questions.getAll();

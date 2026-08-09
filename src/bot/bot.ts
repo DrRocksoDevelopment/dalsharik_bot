@@ -3,6 +3,7 @@ import type { Logger } from 'winston';
 import type { DataStore } from '../storage/data-store.js';
 import type { PollAnswer } from '@telegraf/types';
 import { MESSAGES } from '../content/messages.js';
+import { formatLocalTime, formatRelativeDuration } from '../utils/timezone.js';
 import { registerConfigCommands } from './config-commands.js';
 import { registerStatsCommands } from './stats-commands.js';
 import { getOrCreateChat, isGroupChat, normalizeChatConfig } from './chat-utils.js';
@@ -12,6 +13,8 @@ export interface BotDeps {
   store: DataStore;
   pollAnswerHandler?: (pollAnswer: PollAnswer, updateId: number) => Promise<void>;
   onChatChanged?: (chatId: string) => Promise<void>;
+  ensureScheduled?: (chatId: string) => Promise<void>;
+  nextPublishAt?: (chatId: string) => Promise<number | null>;
 }
 
 export function createBot(token: string, deps: BotDeps): Telegraf {
@@ -51,6 +54,8 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
       return;
     }
     const chatId = ctx.chat.id.toString();
+    const before = await deps.store.chats.get(chatId);
+    const alreadyEnabled = before?.enabled === true;
     const record = await getOrCreateChat(deps.store, chatId);
     if (!record) return;
     await deps.store.chats.update(chatId, {
@@ -58,6 +63,20 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
       updatedAt: new Date().toISOString(),
     });
     deps.logger.info('Бот включён в группе', { chatId });
+
+    if (alreadyEnabled) {
+      await deps.ensureScheduled?.(chatId);
+      const at = await deps.nextPublishAt?.(chatId);
+      if (at === null || at === undefined) {
+        await ctx.reply(MESSAGES.alreadyStarted());
+      } else {
+        const time = formatLocalTime(at, record.timezoneOffsetMinutes);
+        const until = formatRelativeDuration(Math.max(0, at - Date.now()));
+        await ctx.reply(MESSAGES.alreadyStarted(time, until));
+      }
+      return;
+    }
+
     await deps.onChatChanged?.(chatId);
     await ctx.reply(MESSAGES.start(ctx.botInfo?.first_name ?? 'Дальшарик'));
   });
