@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadEnv } from '../src/config/env.js';
 
-const ENV_KEYS = ['BOT_TOKEN', 'LOG_LEVEL', 'LOG_CHAT_ID', 'LOG_FILE', 'DATA_DIR', 'BOT_ADMIN_ID'];
+const ENV_KEYS = ['BOT_TOKEN', 'LOG_LEVEL', 'LOG_CHAT_ID', 'LOG_FILE', 'DATA_DIR', 'BOT_ADMIN_ID', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL'];
 
 const saved: Record<string, string | undefined> = {};
 
@@ -35,6 +35,8 @@ describe('loadEnv', () => {
       LOG_FILE: 'logs/custom.log',
       DATA_DIR: 'data/custom',
       BOT_ADMIN_ID: '42',
+      OPENROUTER_API_KEY: 'sk-or-test',
+      OPENROUTER_MODEL: 'openrouter/auto',
     })) {
       process.env[name] = value;
     }
@@ -45,6 +47,8 @@ describe('loadEnv', () => {
       logFile: 'logs/custom.log',
       dataDir: 'data/custom',
       botAdminId: 42,
+      openrouterApiKey: 'sk-or-test',
+      openrouterModel: 'openrouter/auto',
     });
   });
 
@@ -58,6 +62,8 @@ describe('loadEnv', () => {
       logFile: 'logs/app.log',
       dataDir: 'data',
       botAdminId: null,
+      openrouterApiKey: null,
+      openrouterModel: null,
     });
   });
 

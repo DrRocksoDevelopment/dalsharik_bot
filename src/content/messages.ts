@@ -1,3 +1,5 @@
+export type HelpRole = 'user' | 'admin' | 'super';
+
 export const MESSAGES = {
   start: (botName: string) =>
     `🎯 Привет! Я *${botName}* — бот групповой викторины «Что было дальше?».\n\n` +
@@ -12,22 +14,33 @@ export const MESSAGES = {
     `• Окно ответов настраивается (по умолчанию 1 час)\n` +
     `• После закрытия опроса — результаты: очки, скорость реакции, серии\n\n` +
     `Справка по командам — /help`,
-  help: (botName: string) =>
-    `📖 Команды *${botName}*:\n\n` +
-    `👤 Для всех:\n` +
-    `/help — эта справка\n` +
-    `/top — рейтинг группы\n` +
-    `/top_global — общий рейтинг\n` +
-    `/stats — твоя статистика\n\n` +
-    `🛠 Админы группы и суперадмин:\n` +
-    `/start — включить игру в группе\n` +
-    `/stop — остановить игру в группе\n` +
-    `/set_answer_window <сек> — окно ответов (мин 60)\n` +
-    `/set_interval <сек> — интервал между вопросами (мин 60)\n` +
-    `/set_types <тип1,тип2> — типы вопросов\n` +
-    `/set_difficulty <мин> <макс> — диапазон сложности 1–5\n` +
-    `/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)\n\n` +
-    `📦 Суперадмин: /import (импорт из папки data/imports), отправка JSON-файла в ЛС — импорт в пул, /pending — модерация, /config — конфигурация чата, /metrics — метрики бота`,
+  help: (botName: string, role: HelpRole = 'user') => {
+    const sections: string[] = [
+      '👤 Для всех:\n' +
+        '/help — эта справка\n' +
+        '/top — рейтинг группы\n' +
+        '/top_global — общий рейтинг\n' +
+        '/stats — твоя статистика',
+    ];
+    if (role === 'admin' || role === 'super') {
+      sections.push(
+        '🛠 Админы группы:\n' +
+          '/start — включить игру в группе\n' +
+          '/stop — остановить игру в группе\n' +
+          '/set_answer_window <сек> — окно ответов (мин 60)\n' +
+          '/set_interval <сек> — интервал между вопросами (мин 60)\n' +
+          '/set_types <тип1,тип2> — типы вопросов\n' +
+          '/set_difficulty <мин> <макс> — диапазон сложности 1–5\n' +
+          '/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)',
+      );
+    }
+    if (role === 'super') {
+      sections.push(
+        '📦 Суперадмин: /import (импорт из папки data/imports), отправка JSON-файла в ЛС — импорт в пул, /pending — модерация, /config — конфигурация чата, /metrics — метрики бота, /generate — генерация вопросов ИИ (OpenRouter), /set_ai_key, /set_ai_model, /ai_status — настройка ИИ',
+      );
+    }
+    return `📖 Команды *${botName}*:\n\n${sections.join('\n\n')}`;
+  },
   stop: '⏹ Игра в этой группе остановлена.',
   alreadyStarted: (time?: string, until?: string) =>
     time && until
@@ -176,6 +189,46 @@ export const MESSAGES = {
     if (errors.length > 0) lines.push(`Ошибки:\n${errors.join('\n')}`);
     return lines.join('\n');
   },
+  aiPrivateOnly: 'ℹ️ Настройка ИИ и генерация вопросов работают только в личных сообщениях бота.',
+  aiGenerateBusy: '⏳ Генерация уже идёт — дождись завершения.',
+  aiKeySet: '🔑 Ключ OpenRouter сохранён.\n\nТеперь задай модель: /set_ai_model <модель>\nНапример: /set_ai_model openrouter/auto\nПроверка настроек: /ai_status',
+  aiModelSet: (model: string) => `🤖 Модель сохранена: ${model}`,
+  aiKeyMissing: '🔑 Ключ OpenRouter не задан. Отправь: /set_ai_key <ключ> (только в ЛС)',
+  aiModelMissing:
+    '🤖 Модель не задана. Отправь: /set_ai_model <модель>\nНапример: /set_ai_model openrouter/auto или /set_ai_model google/gemini-2.0-flash-001',
+  aiInvalidUsage: (usage: string) => `❌ Неверный формат. Пример:\n${usage}`,
+  aiUnknownCategory: (usage: string) =>
+    `❌ Неизвестная категория. Допустимые: history, science, technology, culture, geography. Пример:\n${usage}`,
+  aiStatus: (s: { model: string | null; keyMasked: string | null; keyFromEnv: boolean }) => {
+    const keyLine = s.keyMasked
+      ? `• Ключ: ${s.keyMasked}${s.keyFromEnv ? ' (из .env)' : ''}`
+      : '• Ключ: не задан';
+    const modelLine = s.model ? `• Модель: ${s.model}` : '• Модель: не задана';
+    return `🤖 ИИ-генерация вопросов (OpenRouter)\n${modelLine}\n${keyLine}\n\nСменить ключ: /set_ai_key <ключ>\nСменить модель: /set_ai_model <модель>\nСгенерировать: /generate [кол-во] [категория]`;
+  },
+  aiGenerateStarted: (count: number, category: string) =>
+    `🤖 Генерирую ${count} вопросов${category}…\nПроверяю факты и источники через web-поиск.\nЭто может занять 30–120 секунд.`,
+  aiGenerateError: (reason: string, usage: UsageSummary | null) => {
+    const cost = usage ? `\n\n${formatUsage(usage)}` : '';
+    return `❌ Ошибка генерации: ${reason}${cost}`;
+  },
+  aiGenerateReport: (r: {
+    total: number;
+    valid: number;
+    rejectedCount: number;
+    rejected: { errors: string[] }[];
+    usage: UsageSummary;
+  }) => {
+    const lines = [
+      '✅ Генерация завершена',
+      `• Сгенерировано: ${r.total}`,
+      `• Валидных: ${r.valid} — отправлены на модерацию (/pending)`,
+      `• С ошибками: ${r.rejectedCount}`,
+    ];
+    const sample = r.rejected.slice(0, 5).map((x) => `• ${x.errors.join('; ')}`);
+    if (sample.length > 0) lines.push('Ошибки:', ...sample);
+    return `${lines.join('\n')}\n\n${formatUsage(r.usage)}`;
+  },
   noTop: 'Рейтинг пуст. Отвечайте на вопросы, чтобы попасть в топ.',
   noStats: 'У тебя пока нет статистики. Ответь на первый вопрос!',
   topMessage: (title: string, entries: Array<{ name: string; score: number; streak: number }>) => {
@@ -248,4 +301,32 @@ export function escapeHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+export interface UsageSummary {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  webSearchRequests: number;
+  totalCostCredits?: number;
+  estimatedCostUsd: number;
+  inferenceCostUsd: number;
+  searchCostUsd: number;
+}
+
+export function formatUsage(u: UsageSummary): string {
+  const inTokens = u.promptTokens.toLocaleString('ru-RU');
+  const outTokens = u.completionTokens.toLocaleString('ru-RU');
+  const searchLine =
+    u.webSearchRequests > 0
+      ? `• Web-поиск: ${u.webSearchRequests} запросов`
+      : '• Web-поиск: не использовался';
+  return (
+    `🧾 Потребление:\n` +
+    `• Токены: ${inTokens} in / ${outTokens} out\n` +
+    `${searchLine}\n` +
+    `💰 Стоимость: $${u.estimatedCostUsd.toFixed(4)} (включая поиск)\n` +
+    `   • инференс: $${u.inferenceCostUsd.toFixed(4)}\n` +
+    `   • поиск: $${u.searchCostUsd.toFixed(4)}`
+  );
 }

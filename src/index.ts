@@ -23,6 +23,7 @@ import {
 } from './bot/moderation-commands.js';
 import { registerImport } from './bot/import-commands.js';
 import { registerMetricsCommand } from './bot/metrics-commands.js';
+import { registerAiCommands } from './bot/ai-commands.js';
 
 export async function main(): Promise<void> {
   await fs.mkdir(env.dataDir, { recursive: true });
@@ -102,6 +103,15 @@ export async function main(): Promise<void> {
     logger,
     adminId: env.botAdminId,
     metrics,
+  });
+
+  registerAiCommands(bot, {
+    logger,
+    adminId: env.botAdminId,
+    store,
+    reloader,
+    envApiKey: env.openrouterApiKey,
+    envModel: env.openrouterModel,
   });
 
   scheduler = new DefaultScheduler({ logger, store, publisher, finalizer });

@@ -7,6 +7,7 @@ import type { ChatRecord, PublishedQuestion } from '../game/chat.js';
 import type { PollRecord } from '../game/poll.js';
 import type { Question } from '../game/question.js';
 import type { UserProfile } from '../game/user.js';
+import type { AiSettingsRecord } from '../ai/types.js';
 
 export interface MetricsRecord extends Identifiable {
   data: Record<string, unknown>;
@@ -26,6 +27,7 @@ export interface DataStore {
   metrics: JsonStorage<MetricsRecord>;
   pendingQuestions: JsonStorage<Question>;
   questionNotifications: JsonStorage<QuestionNotification>;
+  aiSettings: JsonStorage<AiSettingsRecord>;
 }
 
 export function createDataStore(dir: string = getEnv().dataDir, logger?: Logger): DataStore {
@@ -39,5 +41,6 @@ export function createDataStore(dir: string = getEnv().dataDir, logger?: Logger)
     metrics: new JsonStorage<MetricsRecord>(dir, 'metrics.json', logger),
     pendingQuestions: new JsonStorage<Question>(dir, 'questions_pending.json', logger),
     questionNotifications: new JsonStorage<QuestionNotification>(dir, 'questions_notified.json', logger),
+    aiSettings: new JsonStorage<AiSettingsRecord>(dir, 'settings.json', logger),
   };
 }
