@@ -366,6 +366,7 @@ export class JsonMetricsStore implements MetricsStore {
   async snapshot(): Promise<MetricsSnapshot> {
     const item = await this.store.metrics.get(GLOBAL_ID);
     const raw = item ? asStored(item.data) : emptyStoredSnapshot();
+    ensureDefaults(raw);
     const snapshot = emptySnapshot();
     snapshot.game = gameView(raw.game);
     for (const [id, m] of Object.entries(raw.users)) snapshot.users[id] = userView(m);

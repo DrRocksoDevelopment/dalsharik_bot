@@ -85,7 +85,14 @@ export class JsonStorage<T extends Identifiable> implements Storage<T> {
       if (idx === -1) {
         throw new Error(`Элемент с id "${id}" не найден`);
       }
-      items[idx] = { ...items[idx], ...patch, id } as T;
+      const current = items[idx] as Record<string, unknown>;
+      const allowed = new Set(Object.keys(current));
+      allowed.add('id');
+      const clean: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
+        if (allowed.has(key)) clean[key] = value;
+      }
+      items[idx] = { ...current, ...clean, id } as T;
       await this.writeRaw(items);
     });
   }

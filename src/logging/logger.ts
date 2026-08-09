@@ -1,7 +1,5 @@
 import winston from 'winston';
-import { getEnv } from '../config/config.js';
-
-const env = getEnv();
+import { getEnv, type EnvConfig } from '../config/config.js';
 import { TelegramTransport } from './telegram-transport.js';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -12,11 +10,14 @@ const consoleFormat = printf(({ level, message, timestamp }) => {
   return `${timestamp} [${level}] ${message}`;
 });
 
-mkdirSync(dirname(env.logFile), { recursive: true });
+export type LoggerEnvConfig = Pick<EnvConfig, 'logLevel' | 'logFile' | 'logChatId'>;
 
-let telegramTransport: winston.transport | null = null;
+export function initLogger(
+  getBot: () => import('telegraf').Telegraf,
+  env: LoggerEnvConfig = getEnv(),
+): winston.Logger {
+  mkdirSync(dirname(env.logFile), { recursive: true });
 
-export function initLogger(getBot: () => import('telegraf').Telegraf): winston.Logger {
   const transports: winston.transport[] = [
     new winston.transports.Console({
       level: env.logLevel,
@@ -32,23 +33,18 @@ export function initLogger(getBot: () => import('telegraf').Telegraf): winston.L
   ];
 
   if (env.logChatId) {
-    telegramTransport = new TelegramTransport({
-      bot: getBot(),
-      chatId: env.logChatId,
-      level: 'error',
-      format: winston.format.printf(({ message }) => String(message)),
-    });
-    transports.push(telegramTransport);
+    transports.push(
+      new TelegramTransport({
+        bot: getBot(),
+        chatId: env.logChatId,
+        level: 'error',
+        format: winston.format.printf(({ message }) => String(message)),
+      }),
+    );
   }
 
-  const logger = winston.createLogger({
+  return winston.createLogger({
     level: env.logLevel,
     transports,
   });
-
-  return logger;
-}
-
-export function setTelegramTransport(transport: winston.transport | null): void {
-  telegramTransport = transport;
 }

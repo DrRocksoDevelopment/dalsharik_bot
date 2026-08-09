@@ -1,6 +1,8 @@
 import { loadEnv } from './env.js';
 import type { EnvConfig } from './env.js';
 
+export type { EnvConfig } from './env.js';
+
 let cached: EnvConfig | null = null;
 
 export function getEnv(): EnvConfig {
