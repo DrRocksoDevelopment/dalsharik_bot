@@ -1,0 +1,18 @@
+import type { Telegram } from 'telegraf';
+
+export interface FinalizerSender {
+  closePoll(chatId: string, messageId: number): Promise<void>;
+  sendMessage(chatId: string, text: string): Promise<void>;
+}
+
+export class TelegramFinalizerSender implements FinalizerSender {
+  constructor(private readonly telegram: Telegram) {}
+
+  async closePoll(chatId: string, messageId: number): Promise<void> {
+    await this.telegram.stopPoll(chatId, messageId);
+  }
+
+  async sendMessage(chatId: string, text: string): Promise<void> {
+    await this.telegram.sendMessage(chatId, text);
+  }
+}

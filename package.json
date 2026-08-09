@@ -1,0 +1,33 @@
+{
+  "name": "dalsharik",
+  "version": "0.1.0",
+  "description": "Дальшарик — Telegram-бот для групповой викторины «Что было дальше?»",
+  "private": true,
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "tsx scripts/seed.ts",
+    "validate-questions": "tsx scripts/validate-questions.ts"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "winston": "^3.15.0",
+    "winston-transport": "^4.7.1",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0"
+  }
+}
