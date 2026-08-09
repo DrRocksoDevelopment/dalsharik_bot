@@ -180,7 +180,7 @@ describe('question reloader: import', () => {
     expect(['event_000002', 'event_000010']).toContain(pool?.id);
   });
 
-  it('пропускает вопросы с id из активного пула', async () => {
+  it('переименовывает вопросы с id из активного пула вместо пропуска', async () => {
     const { t, reloader } = await setup();
     await writeJson(t.dir, 'questions.json', [makeQuestion()]);
     await reloader.refresh();
@@ -188,11 +188,11 @@ describe('question reloader: import', () => {
     const result = await reloader.importQuestions([
       makeQuestion({ id: 'event_000001', question: 'Другой текст?' }),
     ]);
-    expect(result.imported).toBe(0);
-    expect(result.skipped).toEqual([
-      { id: 'event_000001', reason: 'id уже есть в активном пуле' },
-    ]);
-    expect(await t.store.questions.getAll()).toHaveLength(1);
+    expect(result.imported).toBe(1);
+    expect(result.renamed).toEqual([{ oldId: 'event_000001', newId: 'event_000002' }]);
+
+    const active = await t.store.questions.getAll();
+    expect(active.map((q) => q.id)).toEqual(['event_000001', 'event_000002']);
   });
 
   it('не добавляет невалидные вопросы', async () => {
@@ -205,6 +205,36 @@ describe('question reloader: import', () => {
     expect(await t.store.questions.getAll()).toHaveLength(0);
   });
 
+  it('исправляет опечатку типа history_next_event', async () => {
+    const { t, reloader } = await setup();
+    const result = await reloader.importQuestions([
+      makeQuestion({
+        id: 'event_000020',
+        type: 'history_next_event' as never,
+        question: 'Вопрос с опечаткой типа?',
+      }),
+    ]);
+
+    expect(result.imported).toBe(1);
+    expect(result.errors).toHaveLength(0);
+    const stored = await t.store.questions.get('event_000020');
+    expect(stored?.type).toBe('historical_next_event');
+  });
+
+  it('пропускает вопрос с текстом, который уже есть в пуле', async () => {
+    const { t, reloader } = await setup();
+    await writeJson(t.dir, 'questions.json', [makeQuestion()]);
+    await reloader.refresh();
+
+    const result = await reloader.importQuestions([
+      makeQuestion({ id: 'event_000020', question: 'Что произошло дальше?' }),
+    ]);
+    expect(result.imported).toBe(0);
+    expect(result.skipped).toEqual([
+      { id: 'event_000020', reason: 'такой вопрос уже есть в пуле' },
+    ]);
+  });
+
   it('частично импортирует валидные из смешанного файла', async () => {
     const { t, reloader } = await setup();
     const result = await reloader.importQuestions([
@@ -214,11 +244,11 @@ describe('question reloader: import', () => {
       makeQuestion({ id: 'event_000001', question: 'Дубликат 1?' }),
     ]);
 
-    expect(result.imported).toBe(2);
-    expect(result.skipped.map((s) => s.id)).toEqual(['event_000001']);
+    expect(result.imported).toBe(3);
+    expect(result.renamed).toEqual([{ oldId: 'event_000001', newId: 'event_000004' }]);
     expect(result.errors.map((e) => e.id)).toEqual(['event_000002']);
 
     const active = await t.store.questions.getAll();
-    expect(active.map((q) => q.id).sort()).toEqual(['event_000001', 'event_000003']);
+    expect(active.map((q) => q.id)).toEqual(['event_000001', 'event_000003', 'event_000004']);
   });
 });

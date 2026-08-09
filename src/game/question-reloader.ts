@@ -5,6 +5,7 @@ import type { DataStore } from '../storage/data-store.js';
 import type { Question } from './question.js';
 import type { QuestionEngine } from './question-engine.js';
 import { validateQuestion, validateQuestionSet } from './question-validator.js';
+import type { QuestionType } from '../types/index.js';
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -25,8 +26,23 @@ export interface QuestionImportError {
 
 export interface QuestionImportResult {
   imported: number;
+  renamed: { oldId: string; newId: string }[];
   skipped: { id: string; reason: string }[];
   errors: QuestionImportError[];
+}
+
+const QUESTION_TYPE_ALIASES: Record<string, QuestionType> = {
+  history_next_event: 'historical_next_event',
+  science_next_event: 'scientific_next_event',
+};
+
+function maxEventIdNumber(ids: string[]): number {
+  let max = 0;
+  for (const id of ids) {
+    const m = /^event_(\d+)$/.exec(id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max;
 }
 
 export class QuestionReloader {
@@ -117,11 +133,18 @@ export class QuestionReloader {
   }
 
   async importQuestions(input: Question[]): Promise<QuestionImportResult> {
-    const result: QuestionImportResult = { imported: 0, skipped: [], errors: [] };
+    const result: QuestionImportResult = { imported: 0, renamed: [], skipped: [], errors: [] };
     const current = await this.deps.store.questions.getAll();
     const currentIds = new Set(current.map((q) => q.id));
-    const seenInBatch = new Set<string>();
+    const currentTexts = new Set(current.map((q) => q.question));
+    const seenIds = new Set<string>();
+    const seenTexts = new Set<string>();
     const accepted: Question[] = [];
+
+    let nextIdNumber = maxEventIdNumber([
+      ...current.map((q) => q.id),
+      ...input.map((q) => (typeof q === 'object' && q !== null && typeof q.id === 'string' ? q.id : '')),
+    ]);
 
     for (const q of input) {
       if (typeof q !== 'object' || q === null) {
@@ -133,36 +156,38 @@ export class QuestionReloader {
         result.errors.push({ id: '(без id)', errors: ['нет id'] });
         continue;
       }
-      const validationErrors = validateQuestion(q);
+
+      const normalized: Question = {
+        ...q,
+        type: QUESTION_TYPE_ALIASES[q.type] ?? q.type,
+        createdAt: q.createdAt ?? new Date().toISOString(),
+      };
+
+      const validationErrors = validateQuestion(normalized);
       if (validationErrors.length > 0) {
         result.errors.push({ id, errors: validationErrors });
         continue;
       }
-      if (currentIds.has(id)) {
-        result.skipped.push({ id, reason: 'id уже есть в активном пуле' });
+
+      if (currentTexts.has(normalized.question) || seenTexts.has(normalized.question)) {
+        result.skipped.push({ id, reason: 'такой вопрос уже есть в пуле' });
         continue;
       }
-      if (seenInBatch.has(id)) {
-        result.skipped.push({ id, reason: 'дубликат id внутри файла' });
-        continue;
+      seenTexts.add(normalized.question);
+
+      let finalId = id;
+      if (currentIds.has(id) || seenIds.has(id)) {
+        finalId = `event_${String(++nextIdNumber).padStart(6, '0')}`;
+        result.renamed.push({ oldId: id, newId: finalId });
       }
-      seenInBatch.add(id);
-      accepted.push({ ...q, createdAt: q.createdAt ?? new Date().toISOString() });
+      seenIds.add(finalId);
+
+      accepted.push({ ...normalized, id: finalId });
     }
 
     if (accepted.length === 0) return result;
 
-    const next = [...current, ...accepted];
-    const setErrors = validateQuestionSet(next);
-    if (setErrors.length > 0) {
-      this.deps.logger.warn('Импорт отклонён: вопросы не прошли общую валидацию', {
-        errors: setErrors.slice(0, 10),
-      });
-      result.errors.push({ id: '(весь файл)', errors: setErrors });
-      return result;
-    }
-
-    await this.applyPool(next);
+    await this.applyPool([...current, ...accepted]);
     result.imported = accepted.length;
     this.deps.logger.info('Импортированы вопросы', { count: accepted.length });
     return result;

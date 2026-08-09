@@ -73,6 +73,7 @@ export const MESSAGES = {
   importError: '❌ Ошибка при импорте вопросов. Попробуйте ещё раз.',
   importResult: (r: {
     imported: number;
+    renamed: { oldId: string; newId: string }[];
     skipped: { id: string; reason: string }[];
     errors: { id: string; errors: string[] }[];
   }) => {
@@ -81,6 +82,8 @@ export const MESSAGES = {
       `✅ Импортировано: ${r.imported}`,
       `⏭ Пропущено: ${r.skipped.length}`,
     ];
+    const renamed = r.renamed.slice(0, 10).map((x) => `• ${x.oldId} → ${x.newId}`);
+    if (renamed.length > 0) lines.push(`🔁 Переименовано (id заняты):\n${renamed.join('\n')}`);
     const skipped = r.skipped.slice(0, 10).map((s) => `• ${s.id} — ${s.reason}`);
     if (skipped.length > 0) lines.push(`Пропущенные:\n${skipped.join('\n')}`);
     const errors = r.errors.slice(0, 10).map((e) => `• ${e.id}: ${e.errors.join('; ')}`);
