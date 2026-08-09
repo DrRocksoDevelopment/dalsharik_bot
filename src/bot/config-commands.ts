@@ -5,10 +5,12 @@ import { isQuestionType } from '../types/index.js';
 import { MESSAGES } from '../content/messages.js';
 import { isGroupChat } from './chat-utils.js';
 import { formatTimezoneOffset, parseTimezoneOffset } from '../utils/timezone.js';
+import { isChatAdminOrSuper } from './permissions.js';
 
 export interface ConfigCommandsDeps {
   logger: Logger;
   store: DataStore;
+  adminId: number | null;
   onChatChanged?: (chatId: string) => Promise<void>;
 }
 
@@ -16,6 +18,10 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_answer_window', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
     const value = Number(ctx.message.text.split(/\s+/)[1]);
     if (!Number.isInteger(value) || value < 60) {
       await ctx.reply(MESSAGES.invalidValue('/set_answer_window 3600'));
@@ -33,6 +39,10 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_interval', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
     const value = Number(ctx.message.text.split(/\s+/)[1]);
     if (!Number.isInteger(value) || value < 60) {
       await ctx.reply(MESSAGES.invalidValue('/set_interval 7200'));
@@ -50,6 +60,10 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_types', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
     const raw = ctx.message.text.split(/\s+/).slice(1).join('').trim();
     if (!raw) {
       await ctx.reply(MESSAGES.invalidValue('/set_types historical_next_event,culture_next_event'));
@@ -74,6 +88,10 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_difficulty', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
     const parts = ctx.message.text.split(/\s+/).slice(1);
     const min = Number(parts[0]);
     const max = Number(parts[1]);
@@ -97,6 +115,10 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_timezone', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
     const raw = ctx.message.text.split(/\s+/)[1];
     if (raw === undefined) {
       await ctx.reply(MESSAGES.invalidValue('/set_timezone +3'));

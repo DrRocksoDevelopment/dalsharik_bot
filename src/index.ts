@@ -20,6 +20,7 @@ import {
   registerModeration,
 } from './bot/moderation-commands.js';
 import { registerImport } from './bot/import-commands.js';
+import { registerMetricsCommand } from './bot/metrics-commands.js';
 
 export async function main(): Promise<void> {
   const store = createDataStore();
@@ -36,6 +37,7 @@ export async function main(): Promise<void> {
   bot = createBot(env.botToken, {
     logger,
     store,
+    adminId: env.botAdminId,
     pollAnswerHandler: (pollAnswer, updateId) =>
       processPollAnswer(pollAnswer, updateId, { logger, store, metrics }),
     onChatChanged: (chatId) => scheduler?.scheduleChat(chatId) ?? Promise.resolve(),
@@ -91,6 +93,12 @@ export async function main(): Promise<void> {
     adminId: env.botAdminId,
     reloader,
     importDir: join(env.dataDir, 'imports'),
+  });
+
+  registerMetricsCommand(bot, {
+    logger,
+    adminId: env.botAdminId,
+    metrics,
   });
 
   scheduler = new DefaultScheduler({ logger, store, publisher, finalizer });

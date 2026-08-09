@@ -4,6 +4,7 @@ import type { DataStore } from '../storage/data-store.js';
 import type { PollAnswer } from '@telegraf/types';
 import { MESSAGES } from '../content/messages.js';
 import { formatLocalTime, formatRelativeDuration } from '../utils/timezone.js';
+import { isChatAdminOrSuper } from './permissions.js';
 import { registerConfigCommands } from './config-commands.js';
 import { registerStatsCommands } from './stats-commands.js';
 import { getOrCreateChat, isGroupChat, normalizeChatConfig } from './chat-utils.js';
@@ -11,6 +12,7 @@ import { getOrCreateChat, isGroupChat, normalizeChatConfig } from './chat-utils.
 export interface BotDeps {
   logger: Logger;
   store: DataStore;
+  adminId: number | null;
   pollAnswerHandler?: (pollAnswer: PollAnswer, updateId: number) => Promise<void>;
   onChatChanged?: (chatId: string) => Promise<void>;
   ensureScheduled?: (chatId: string) => Promise<void>;
@@ -53,6 +55,10 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
       await ctx.reply(MESSAGES.onlyGroups);
       return;
     }
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
     const chatId = ctx.chat.id.toString();
     const before = await deps.store.chats.get(chatId);
     const alreadyEnabled = before?.enabled === true;
@@ -88,6 +94,10 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
   bot.command('stop', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId) return;
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
     await deps.store.chats.update(chatId, {
       enabled: false,
       updatedAt: new Date().toISOString(),
@@ -98,6 +108,10 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
   });
 
   bot.command('config', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
     const chatId = ctx.chat?.id.toString();
     if (!chatId) return;
     const stored = await deps.store.chats.get(chatId);

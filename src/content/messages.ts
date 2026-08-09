@@ -14,19 +14,21 @@ export const MESSAGES = {
     `Справка по командам — /help`,
   help: (botName: string) =>
     `📖 Команды *${botName}*:\n\n` +
-    `/start — описание бота\n` +
+    `👤 Для всех:\n` +
     `/help — эта справка\n` +
-    `/stop — остановить игру в группе\n` +
     `/config — показать конфигурацию\n` +
+    `/top — рейтинг группы\n` +
+    `/top_global — общий рейтинг\n` +
+    `/stats — твоя статистика\n\n` +
+    `🛠 Админы группы и суперадмин:\n` +
+    `/start — включить игру в группе\n` +
+    `/stop — остановить игру в группе\n` +
     `/set_answer_window <сек> — окно ответов (мин 60)\n` +
     `/set_interval <сек> — интервал между вопросами (мин 60)\n` +
     `/set_types <тип1,тип2> — типы вопросов\n` +
     `/set_difficulty <мин> <макс> — диапазон сложности 1–5\n` +
-    `/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)\n` +
-    `/top — рейтинг группы\n` +
-    `/top_global — общий рейтинг\n` +
-    `/stats — твоя статистика\n\n` +
-    `📦 Админ: отправьте боту JSON-файл с вопросами — импорт в пул (в ЛС)`,
+    `/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)\n\n` +
+    `📦 Суперадмин: /import (импорт из папки data/imports), отправка JSON-файла в ЛС — импорт в пул, /pending — модерация, /config — конфигурация чата, /metrics — метрики бота`,
   stop: '⏹ Игра в этой группе остановлена.',
   alreadyStarted: (time?: string, until?: string) =>
     time && until
@@ -44,8 +46,45 @@ export const MESSAGES = {
   invalidDifficultyRange: '❌ Сложность должна быть от 1 до 5, мин ≤ макс.',
   invalidTimeZone:
     '❌ Неверный часовой пояс. Формат: /set_timezone ±Ч[:ММ], от −12 до +14. Примеры: +3, -5, +5:30.',
-  notAdmin: '❌ Только администратор бота может выполнять эту команду.',
+  notAdmin: '❌ Эта команда доступна только администраторам (группы или бота).',
   noPending: '📭 Ожидающих вопросов нет.',
+  metricsError: '❌ Не удалось получить метрики.',
+  metrics: (m: {
+    questionsPublished: number;
+    questionsCompleted: number;
+    totalAnswers: number;
+    correctAnswers: number;
+    wrongAnswers: number;
+    averageReactionMs: number;
+    medianReactionMs: number;
+    fastestCorrectMs: number | null;
+    slowestCorrectMs: number | null;
+    users: number;
+    chats: number;
+    topChats: { chatId: string; answersPerDay: number }[];
+  }) => {
+    const accuracy = m.totalAnswers > 0 ? (m.correctAnswers / m.totalAnswers) * 100 : 0;
+    const lines = [
+      '📊 Метрики бота',
+      '',
+      '🎮 Игра:',
+      `• Опубликовано вопросов: ${m.questionsPublished}`,
+      `• Завершено раундов: ${m.questionsCompleted}`,
+      `• Ответов: ${m.totalAnswers} (✅ ${m.correctAnswers} · ❌ ${m.wrongAnswers})`,
+      `• Точность: ${accuracy.toFixed(1)}%`,
+      `• Средняя скорость ответа: ${formatReactionTime(m.averageReactionMs)} · Медиана: ${formatReactionTime(m.medianReactionMs)}`,
+      `• Самый быстрый верный: ${m.fastestCorrectMs === null ? '—' : formatReactionTime(m.fastestCorrectMs)} · Самый поздний: ${m.slowestCorrectMs === null ? '—' : formatReactionTime(m.slowestCorrectMs)}`,
+      '',
+      `👥 Активных игроков: ${m.users}`,
+      `💬 Чатов с игрой: ${m.chats}`,
+    ];
+    if (m.topChats.length > 0) {
+      lines.push('');
+      lines.push('🏆 Топ чатов по активности:');
+      lines.push(m.topChats.map((c) => `• ${c.chatId} — ${c.answersPerDay.toFixed(1)} ответов/день`).join('\n'));
+    }
+    return lines.join('\n');
+  },
   pendingList: (questions: { id: string; event: { title: string }; category: string; difficulty: number }[]) =>
     `📋 Ожидают одобрения (${questions.length}):\n` +
     questions.map((q) => `• ${q.id} — ${q.event.title} (${q.category}, ${q.difficulty}/5)`).join('\n'),
