@@ -156,31 +156,29 @@ export class DefaultScheduler implements Scheduler {
 
   private async runPublish(chat: ChatConfig): Promise<void> {
     if (!this.running) return;
-    const fresh = await this.deps.store.chats.get(chat.chatId);
-    if (!fresh?.enabled) return;
-
-    this.deps.logger.debug('Публикация вопроса', { chatId: chat.chatId });
-    let poll: PollRecord | null;
     try {
-      poll = await this.deps.publisher.publish(chat);
+      const fresh = await this.deps.store.chats.get(chat.chatId);
+      if (!fresh?.enabled) return;
+
+      this.deps.logger.debug('Публикация вопроса', { chatId: chat.chatId });
+      const poll = await this.deps.publisher.publish(chat);
+      if (poll) {
+        const delay = Math.max(0, Date.parse(poll.expiresAt) - this.now());
+        this.schedulePollClose(poll, delay);
+        return;
+      }
+
+      this.deps.logger.warn('Нет вопросов для публикации, повторная попытка', {
+        chatId: chat.chatId,
+      });
+      await this.scheduleNextPublish(chat, this.retryDelayMs);
     } catch (err) {
       this.deps.logger.error('Ошибка публикации вопроса', {
         chatId: chat.chatId,
         error: err instanceof Error ? err.message : String(err),
       });
       await this.scheduleNextPublish(chat, this.retryDelayMs);
-      return;
     }
-    if (poll) {
-      const delay = Math.max(0, Date.parse(poll.expiresAt) - this.now());
-      this.schedulePollClose(poll, delay);
-      return;
-    }
-
-    this.deps.logger.warn('Нет вопросов для публикации, повторная попытка', {
-      chatId: chat.chatId,
-    });
-    await this.scheduleNextPublish(chat, this.retryDelayMs);
   }
 
   private schedulePollClose(poll: PollRecord, delayMs: number): void {
