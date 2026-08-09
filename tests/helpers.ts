@@ -132,8 +132,13 @@ export async function makeBotHarness(): Promise<BotHarness> {
         sendMessage(payload.chat_id, payload.text, payload);
         return Promise.resolve({ message_id: 1 });
       case 'sendPoll':
-        sendPoll(payload.chat_id, payload.question, payload);
-        return Promise.resolve({ poll_id: 'poll-1', message_id: 1 });
+        sendPoll(payload.chat_id, payload.question, payload.options, payload);
+        return Promise.resolve({ poll_id: 'poll-1', message_id: 1, poll: { id: 'poll-1' } });
+      case 'sendQuiz':
+        sendPoll(payload.chat_id, payload.question, payload.options, payload);
+        return Promise.resolve({ message_id: 1, poll: { id: 'poll-1' } });
+      case 'stopPoll':
+        return Promise.resolve({ total_voter_count: 5 });
       case 'answerCallbackQuery':
         answerCbQuery(payload);
         return Promise.resolve(true);
