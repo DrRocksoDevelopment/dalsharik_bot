@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { Logger } from 'winston';
 import { FileLock } from './lock.js';
 import type { Identifiable, Storage } from './storage.js';
 
@@ -14,9 +15,9 @@ export class JsonStorage<T extends Identifiable> implements Storage<T> {
   private readonly filePath: string;
   private readonly lock: FileLock;
 
-  constructor(dataDir: string, fileName: string) {
+  constructor(dataDir: string, fileName: string, logger?: Logger) {
     this.filePath = join(dataDir, fileName);
-    this.lock = new FileLock(join(dataDir, 'locks', `${fileName}.lock`));
+    this.lock = new FileLock(join(dataDir, 'locks', `${fileName}.lock`), logger);
   }
 
   private async readRaw(): Promise<T[]> {

@@ -44,6 +44,8 @@ export class DefaultScheduler implements Scheduler {
   private pollTimers = new Map<string, NodeJS.Timeout>();
   private publishTimers = new Map<string, NodeJS.Timeout>();
   private publishAt = new Map<string, number>();
+  private activePolls = new Map<string, PollRecord>();
+  private lastPublished = new Map<string, number>();
   private tickTimer: NodeJS.Timeout | null = null;
   private running = false;
 
@@ -80,6 +82,8 @@ export class DefaultScheduler implements Scheduler {
     this.pollTimers.clear();
     this.publishTimers.clear();
     this.publishAt.clear();
+    this.activePolls.clear();
+    this.lastPublished.clear();
     this.deps.logger.info('Scheduler остановлен');
   }
 
@@ -99,6 +103,7 @@ export class DefaultScheduler implements Scheduler {
     const activePolls = await this.deps.store.polls.find((p) => p.status === 'active');
     const now = this.now();
     for (const poll of activePolls) {
+      this.activePolls.set(poll.chatId, poll);
       const expiresAt = Date.parse(poll.expiresAt);
       if (Number.isNaN(expiresAt) || expiresAt <= now) {
         this.deps.logger.info('Восстановление: завершаю истёкший poll', { pollId: poll.id });
@@ -128,10 +133,7 @@ export class DefaultScheduler implements Scheduler {
     const chat = await this.deps.store.chats.get(chatId);
     if (!chat?.enabled) return;
 
-    const active = await this.deps.store.polls.find(
-      (p) => p.chatId === chatId && p.status === 'active',
-    );
-    if (active.length > 0) return;
+    if (this.activePolls.has(chatId)) return;
 
     await this.scheduleNextPublish(chat);
   }
@@ -143,10 +145,7 @@ export class DefaultScheduler implements Scheduler {
     const chat = await this.deps.store.chats.get(chatId);
     if (!chat?.enabled) return;
 
-    const active = await this.deps.store.polls.find(
-      (p) => p.chatId === chatId && p.status === 'active',
-    );
-    if (active.length > 0) return;
+    if (this.activePolls.has(chatId)) return;
 
     await this.scheduleNextPublish(chat);
   }
@@ -154,6 +153,17 @@ export class DefaultScheduler implements Scheduler {
   async getNextPublishAt(chatId: string): Promise<number | null> {
     const scheduled = this.publishAt.get(chatId);
     if (scheduled !== undefined) return scheduled;
+
+    const activePoll = this.activePolls.get(chatId);
+    if (activePoll) {
+      const chat = await this.deps.store.chats.get(chatId);
+      if (chat) {
+        const expiresAt = Date.parse(activePoll.expiresAt);
+        if (!Number.isNaN(expiresAt)) {
+          return expiresAt + chat.questionInterval * 1000;
+        }
+      }
+    }
 
     const active = await this.deps.store.polls.find(
       (p) => p.chatId === chatId && p.status === 'active',
@@ -176,10 +186,7 @@ export class DefaultScheduler implements Scheduler {
     for (const chat of chats) {
       if (!chat.enabled) continue;
       if (this.publishTimers.has(chat.chatId)) continue;
-      const active = await this.deps.store.polls.find(
-        (p) => p.chatId === chat.chatId && p.status === 'active',
-      );
-      if (active.length > 0) continue;
+      if (this.activePolls.has(chat.chatId)) continue;
       await this.scheduleNextPublish(chat);
     }
   }
@@ -190,13 +197,19 @@ export class DefaultScheduler implements Scheduler {
 
     let delayMs = overrideDelayMs;
     if (delayMs === undefined) {
-      const history = await this.deps.store.questionHistory.find(
-        (h) => h.chatId === chat.chatId,
-      );
-      if (history.length === 0) {
+      let lastPublished = this.lastPublished.get(chat.chatId);
+      if (lastPublished === undefined) {
+        const history = await this.deps.store.questionHistory.find(
+          (h) => h.chatId === chat.chatId,
+        );
+        lastPublished = history.length === 0
+          ? 0
+          : Math.max(...history.map((h) => Date.parse(h.publishedAt)));
+        this.lastPublished.set(chat.chatId, lastPublished);
+      }
+      if (lastPublished === 0) {
         delayMs = this.freshChatDelayMs;
       } else {
-        const lastPublished = Math.max(...history.map((h) => Date.parse(h.publishedAt)));
         delayMs = Math.max(0, lastPublished + chat.questionInterval * 1000 - this.now());
       }
     }
@@ -221,6 +234,9 @@ export class DefaultScheduler implements Scheduler {
       this.deps.logger.debug('Публикация вопроса', { chatId: chat.chatId });
       const poll = await this.deps.publisher.publish(chat);
       if (poll) {
+        const publishedAt = Date.parse(poll.createdAt);
+        if (!Number.isNaN(publishedAt)) this.lastPublished.set(chat.chatId, publishedAt);
+        this.activePolls.set(chat.chatId, poll);
         const delay = Math.max(0, Date.parse(poll.expiresAt) - this.now());
         this.schedulePollClose(poll, delay);
         return;
@@ -261,6 +277,7 @@ export class DefaultScheduler implements Scheduler {
       return;
     }
 
+    this.activePolls.delete(poll.chatId);
     const chat = await this.deps.store.chats.get(poll.chatId);
     if (chat?.enabled) {
       await this.scheduleNextPublish(chat, chat.questionInterval * 1000);

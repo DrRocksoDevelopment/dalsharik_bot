@@ -246,10 +246,14 @@ export class QuestionReloader {
         return;
       }
 
-      this.lastGoodPool = parsed as Question[];
-      this.deps.engine.updatePool(parsed as Question[]);
-      await this.writeJson(this.backupFile, parsed);
-      this.deps.logger.info('Вопросы перезагружены', { count: (parsed as Question[]).length });
+      const next = parsed as Question[];
+      if (JSON.stringify(this.lastGoodPool) === JSON.stringify(next)) {
+        return;
+      }
+      this.lastGoodPool = next;
+      this.deps.engine.updatePool(next);
+      await this.writeJson(this.backupFile, next);
+      this.deps.logger.info('Вопросы перезагружены', { count: next.length });
     } catch (err) {
       this.deps.logger.error('Ошибка перезагрузки вопросов', { error: String(err) });
     } finally {

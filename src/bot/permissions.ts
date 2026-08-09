@@ -1,9 +1,11 @@
 import type { Context } from 'telegraf';
+import type { Logger } from 'winston';
 import { isGroupChat } from './chat-utils.js';
 
 export async function isChatAdminOrSuper(
   ctx: Context,
   superAdminId: number | null,
+  logger?: Logger,
 ): Promise<boolean> {
   const from = ctx.from?.id;
   if (from === undefined) return false;
@@ -14,7 +16,11 @@ export async function isChatAdminOrSuper(
     return admins.some(
       (m) => m.user.id === from && (m.status === 'creator' || m.status === 'administrator'),
     );
-  } catch {
+  } catch (err) {
+    logger?.warn('Не удалось проверить права администратора', {
+      chatId: ctx.chat.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return false;
   }
 }

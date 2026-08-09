@@ -2,9 +2,13 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import winston from 'winston';
+import { vi } from 'vitest';
+import { Telegraf, Telegram } from 'telegraf';
+import type { Update } from '@telegraf/types';
 import { createDataStore, type DataStore } from '../src/storage/data-store.js';
 import type { Question } from '../src/game/question.js';
 import type { PollRecord } from '../src/game/poll.js';
+import type { ChatRecord } from '../src/game/chat.js';
 
 export function makeLogger(): winston.Logger {
   return winston.createLogger({ silent: true });
@@ -19,7 +23,7 @@ export interface TempStore {
 export async function makeTempStore(): Promise<TempStore> {
   const dir = await mkdtemp(join(tmpdir(), 'dalsharik-test-'));
   return {
-    store: createDataStore(dir),
+    store: createDataStore(dir, makeLogger()),
     dir,
     cleanup: () => rm(dir, { recursive: true, force: true }),
   };
@@ -64,4 +68,146 @@ export function makePoll(overrides: Partial<PollRecord> = {}): PollRecord {
     status: 'active',
     ...overrides,
   };
+}
+
+export function makeChatRecord(chatId: string, overrides: Partial<ChatRecord> = {}): ChatRecord {
+  return {
+    id: chatId,
+    chatId,
+    enabled: true,
+    answerWindow: 3600,
+    questionInterval: 7200,
+    questionTypes: ['historical_next_event'],
+    categories: ['history'],
+    difficultyMin: 1,
+    difficultyMax: 5,
+    timezoneOffsetMinutes: 180,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  } as ChatRecord;
+}
+
+export interface BotHarness {
+  bot: Telegraf;
+  store: DataStore;
+  sendMessage: ReturnType<typeof vi.fn>;
+  sendPoll: ReturnType<typeof vi.fn>;
+  answerCbQuery: ReturnType<typeof vi.fn>;
+  getChatAdministrators: ReturnType<typeof vi.fn>;
+  editMessageReplyMarkup: ReturnType<typeof vi.fn>;
+  getMe: ReturnType<typeof vi.fn>;
+  cleanup(): Promise<void>;
+}
+
+export async function makeBotHarness(): Promise<BotHarness> {
+  const dir = await mkdtemp(join(tmpdir(), 'dalsharik-bot-test-'));
+  const store = createDataStore(dir, makeLogger());
+  const bot = new Telegraf('test:token');
+
+  const sendMessage = vi.fn();
+  const sendPoll = vi.fn();
+  const answerCbQuery = vi.fn();
+  const getChatAdministrators = vi.fn();
+  const editMessageReplyMarkup = vi.fn();
+  const getMe = vi.fn();
+
+  const callApi = vi.spyOn(Telegram.prototype, 'callApi').mockImplementation(((
+    method: string,
+    payload: Record<string, unknown>,
+  ) => {
+    switch (method) {
+      case 'getMe':
+        getMe();
+        return Promise.resolve({
+          id: 1,
+          is_bot: true,
+          first_name: 'Дальшарик',
+          username: 'dalsharik_test_bot',
+          can_join_groups: true,
+          can_read_all_group_messages: true,
+          supports_inline_queries: false,
+        });
+      case 'sendMessage':
+        sendMessage(payload.chat_id, payload.text, payload);
+        return Promise.resolve({ message_id: 1 });
+      case 'sendPoll':
+        sendPoll(payload.chat_id, payload.question, payload);
+        return Promise.resolve({ poll_id: 'poll-1', message_id: 1 });
+      case 'answerCallbackQuery':
+        answerCbQuery(payload);
+        return Promise.resolve(true);
+      case 'getChatAdministrators':
+        getChatAdministrators(payload.chat_id);
+        return Promise.resolve([]);
+      case 'editMessageReplyMarkup':
+        editMessageReplyMarkup(payload);
+        return Promise.resolve(true);
+      default:
+        return Promise.resolve({});
+    }
+  }) as never);
+
+  return {
+    bot,
+    store,
+    sendMessage,
+    sendPoll,
+    answerCbQuery,
+    getChatAdministrators,
+    editMessageReplyMarkup,
+    getMe,
+    cleanup: async () => {
+      callApi.mockRestore();
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+export function commandUpdate(
+  text: string,
+  opts: { fromId?: number; chatId?: number; chatType?: 'group' | 'supergroup' | 'private' } = {},
+): Update {
+  const cmdLen = (/^\/\S+/.exec(text) ?? [''])[0].length;
+  return {
+    update_id: 1,
+    message: {
+      message_id: 1,
+      from: { id: opts.fromId ?? 42, is_bot: false, first_name: 'Test', username: 'tester' },
+      chat: {
+        id: opts.chatId ?? -100123,
+        type: opts.chatType ?? 'supergroup',
+        title: 'Test Group',
+      },
+      date: 0,
+      text,
+      entities: [{ type: 'bot_command', offset: 0, length: cmdLen }],
+    },
+  } as unknown as Update;
+}
+
+export function callbackUpdate(
+  data: string,
+  opts: { fromId?: number; chatId?: number } = {},
+): Update {
+  return {
+    update_id: 2,
+    callback_query: {
+      id: 'cb-1',
+      from: { id: opts.fromId ?? 42, is_bot: false, first_name: 'Test', username: 'tester' },
+      message: {
+        message_id: 1,
+        from: { id: 1, is_bot: true, first_name: 'Bot' },
+        chat: {
+          id: opts.chatId ?? -100123,
+          type: 'supergroup',
+          title: 'Test Group',
+        },
+        date: 0,
+        text: 'review',
+      },
+      chat_instance: '1',
+      data,
+    },
+  } as unknown as Update;
 }

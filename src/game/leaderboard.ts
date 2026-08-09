@@ -77,9 +77,10 @@ export async function buildUserStats(
     times.length === 0 ? 0 : times.reduce((s, t) => s + t, 0) / times.length;
   const medianReactionMs = median(times);
 
+  const questionsById = new Map((await store.questions.getAll()).map((q) => [q.id, q]));
   const categoryCounts = new Map<Category, number>();
   for (const record of records) {
-    const question = await store.questions.get(record.questionId);
+    const question = questionsById.get(record.questionId);
     if (!question) continue;
     categoryCounts.set(question.category, (categoryCounts.get(question.category) ?? 0) + 1);
   }

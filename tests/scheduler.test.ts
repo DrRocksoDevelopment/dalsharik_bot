@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DefaultScheduler, type PollPublisher, type PollFinalizer } from '../src/scheduler/scheduler.js';
 import type { ChatConfig } from '../src/types/index.js';
 import type { PollRecord } from '../src/game/poll.js';
 import type { ChatRecord } from '../src/game/chat.js';
 import type { DataStore } from '../src/storage/data-store.js';
-import { makeLogger, makeTempStore } from './helpers.js';
+import { makeLogger, makeTempStore, type TempStore } from './helpers.js';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -72,8 +72,17 @@ function makeFinalizer(store: DataStore) {
 }
 
 describe('scheduler', () => {
+  let t: TempStore;
+
+  beforeEach(async () => {
+    t = await makeTempStore();
+  });
+
+  afterEach(async () => {
+    await t.cleanup();
+  });
+
   it('публикует вопрос для свежего чата после начальной задержки', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123'));
     const poll = makeActivePoll('-100123', { expiresInMs: 60_000 });
     const { publisher, published } = makePublisher(t.store, [poll]);
@@ -94,11 +103,9 @@ describe('scheduler', () => {
     expect(stored).toHaveLength(1);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('закрывает истёкший poll при восстановлении', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123'));
     await t.store.polls.insert(makeActivePoll('-100123', { id: 'expired', expiresInMs: -5000 }));
     const { publisher } = makePublisher(t.store, []);
@@ -117,12 +124,9 @@ describe('scheduler', () => {
     expect(stored?.status).toBe('completed');
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('восстанавливает таймер активного poll и завершает по истечении', async () => {
-    const t = await makeTempStore();
-    await t.store.chats.insert(makeChat('-100123'));
     await t.store.polls.insert(makeActivePoll('-100123', { id: 'future', expiresInMs: 60 }));
     const { publisher } = makePublisher(t.store, []);
     const { finalizer, finalized } = makeFinalizer(t.store);
@@ -140,11 +144,9 @@ describe('scheduler', () => {
     expect(finalized).toEqual(['future']);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('планирует повторную попытку, если вопросов нет', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123'));
     const { publisher, published } = makePublisher(t.store, []);
     const { finalizer } = makeFinalizer(t.store);
@@ -163,11 +165,9 @@ describe('scheduler', () => {
     expect(published.length).toBeGreaterThanOrEqual(2);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('не публикует для отключённого чата', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123', { enabled: false }));
     const { publisher, published } = makePublisher(t.store, [makeActivePoll('-100123')]);
     const { finalizer } = makeFinalizer(t.store);
@@ -185,11 +185,9 @@ describe('scheduler', () => {
     expect(published).toHaveLength(0);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('ошибка публикации (удалённый чат) не роняет scheduler и планирует повтор', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123'));
     let attempts = 0;
     const publisher: PollPublisher = {
@@ -214,11 +212,9 @@ describe('scheduler', () => {
     expect(attempts).toBeGreaterThanOrEqual(2);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('getNextPublishAt возвращает время публикации по таймеру', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123'));
     const { publisher } = makePublisher(t.store, []);
     const { finalizer } = makeFinalizer(t.store);
@@ -238,11 +234,9 @@ describe('scheduler', () => {
     expect(await scheduler.getNextPublishAt('-100123')).toBe(now + 3_600_000);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('ensureScheduled не пересоздаёт существующий таймер', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123'));
     const { publisher } = makePublisher(t.store, []);
     const { finalizer } = makeFinalizer(t.store);
@@ -267,11 +261,9 @@ describe('scheduler', () => {
     expect(scheduler.getTimersInfo().publishTimers).toBe(1);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('ensureScheduled создаёт таймер, если его нет', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123', { enabled: false }));
     const { publisher } = makePublisher(t.store, []);
     const { finalizer } = makeFinalizer(t.store);
@@ -295,11 +287,9 @@ describe('scheduler', () => {
     expect(scheduler.getTimersInfo().publishTimers).toBe(1);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('getNextPublishAt при активном опросе возвращает expiresAt + интервал', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123'));
     await t.store.polls.insert(makeActivePoll('-100123', { id: 'p', expiresInMs: 60_000 }));
     const { publisher } = makePublisher(t.store, []);
@@ -318,11 +308,9 @@ describe('scheduler', () => {
     expect(await scheduler.getNextPublishAt('-100123')).toBe(Date.parse(poll.expiresAt) + 7200 * 1000);
 
     await scheduler.stop();
-    await t.cleanup();
   });
 
   it('getNextPublishAt возвращает null для отключённого чата', async () => {
-    const t = await makeTempStore();
     await t.store.chats.insert(makeChat('-100123', { enabled: false }));
     const { publisher } = makePublisher(t.store, []);
     const { finalizer } = makeFinalizer(t.store);
@@ -339,6 +327,5 @@ describe('scheduler', () => {
     expect(await scheduler.getNextPublishAt('-100123')).toBeNull();
 
     await scheduler.stop();
-    await t.cleanup();
   });
 });

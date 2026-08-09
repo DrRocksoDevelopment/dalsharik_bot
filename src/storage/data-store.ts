@@ -1,5 +1,6 @@
 import { JsonStorage } from '../storage/index.js';
 import { getEnv } from '../config/config.js';
+import type { Logger } from 'winston';
 import type { Identifiable } from './storage.js';
 import type { AnswerRecord } from '../game/answer.js';
 import type { ChatRecord, PublishedQuestion } from '../game/chat.js';
@@ -27,16 +28,16 @@ export interface DataStore {
   questionNotifications: JsonStorage<QuestionNotification>;
 }
 
-export function createDataStore(dir: string = getEnv().dataDir): DataStore {
+export function createDataStore(dir: string = getEnv().dataDir, logger?: Logger): DataStore {
   return {
-    users: new JsonStorage<UserProfile>(dir, 'users.json'),
-    questions: new JsonStorage<Question>(dir, 'questions.json'),
-    answers: new JsonStorage<AnswerRecord>(dir, 'answers.json'),
-    chats: new JsonStorage<ChatRecord>(dir, 'chats.json'),
-    polls: new JsonStorage<PollRecord>(dir, 'polls.json'),
-    questionHistory: new JsonStorage<PublishedQuestion>(dir, 'question_history.json'),
-    metrics: new JsonStorage<MetricsRecord>(dir, 'metrics.json'),
-    pendingQuestions: new JsonStorage<Question>(dir, 'questions_pending.json'),
-    questionNotifications: new JsonStorage<QuestionNotification>(dir, 'questions_notified.json'),
+    users: new JsonStorage<UserProfile>(dir, 'users.json', logger),
+    questions: new JsonStorage<Question>(dir, 'questions.json', logger),
+    answers: new JsonStorage<AnswerRecord>(dir, 'answers.json', logger),
+    chats: new JsonStorage<ChatRecord>(dir, 'chats.json', logger),
+    polls: new JsonStorage<PollRecord>(dir, 'polls.json', logger),
+    questionHistory: new JsonStorage<PublishedQuestion>(dir, 'question_history.json', logger),
+    metrics: new JsonStorage<MetricsRecord>(dir, 'metrics.json', logger),
+    pendingQuestions: new JsonStorage<Question>(dir, 'questions_pending.json', logger),
+    questionNotifications: new JsonStorage<QuestionNotification>(dir, 'questions_notified.json', logger),
   };
 }

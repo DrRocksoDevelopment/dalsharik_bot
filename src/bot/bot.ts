@@ -19,8 +19,8 @@ export interface BotDeps {
   nextPublishAt?: (chatId: string) => Promise<number | null>;
 }
 
-export function createBot(token: string, deps: BotDeps): Telegraf {
-  const bot = new Telegraf(token);
+export function createBot(token: string, deps: BotDeps, botInstance?: Telegraf): Telegraf {
+  const bot = botInstance ?? new Telegraf(token);
 
   bot.use((ctx, next) => {
     const chat = ctx.chat?.id?.toString();
@@ -55,7 +55,7 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
       await ctx.reply(MESSAGES.onlyGroups);
       return;
     }
-    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }
@@ -94,7 +94,7 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
   bot.command('stop', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId) return;
-    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }

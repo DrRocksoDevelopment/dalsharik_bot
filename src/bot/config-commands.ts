@@ -18,7 +18,7 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_answer_window', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
-    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }
@@ -39,7 +39,7 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_interval', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
-    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }
@@ -60,7 +60,7 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_types', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
-    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }
@@ -88,7 +88,7 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_difficulty', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
-    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }
@@ -115,7 +115,7 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
   bot.command('set_timezone', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId || !isGroupChat(ctx.chat?.type)) return;
-    if (!(await isChatAdminOrSuper(ctx, deps.adminId))) {
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }

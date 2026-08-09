@@ -25,12 +25,12 @@ import { registerMetricsCommand } from './bot/metrics-commands.js';
 
 export async function main(): Promise<void> {
   await fs.mkdir(env.dataDir, { recursive: true });
-  const store = createDataStore();
   let bot: ReturnType<typeof createBot> | null = null;
   const logger = initLogger(() => {
     if (!bot) throw new Error('Бот ещё не создан');
     return bot;
   });
+  const store = createDataStore(env.dataDir, logger);
   const metrics = new JsonMetricsStore(store);
 
   let scheduler: DefaultScheduler | null = null;

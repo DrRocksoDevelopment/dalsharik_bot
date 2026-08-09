@@ -16,7 +16,6 @@ export const MESSAGES = {
     `📖 Команды *${botName}*:\n\n` +
     `👤 Для всех:\n` +
     `/help — эта справка\n` +
-    `/config — показать конфигурацию\n` +
     `/top — рейтинг группы\n` +
     `/top_global — общий рейтинг\n` +
     `/stats — твоя статистика\n\n` +
@@ -35,7 +34,8 @@ export const MESSAGES = {
       ? `ℹ️ Всё по плану, работаем! ⏭ Следующий вопрос — в ${time} (через ~${until}) по местному времени.`
       : 'ℹ️ Всё по плану, работаем! Следующий вопрос появится по расписанию.',
   enabled: '✅ Бот включён.',
-  config: (cfg: Record<string, unknown>) => `<pre>${JSON.stringify(cfg, null, 2)}</pre>`,
+  config: (cfg: Record<string, unknown>) =>
+    `<pre>${escapeHtml(JSON.stringify(cfg, null, 2))}</pre>`,
   configUpdated: (field: string, value: string) =>
     `⚙️ Конфигурация обновлена: ${field} → ${value}`,
   invalidValue: (usage: string) => `❌ Неверный формат. Пример:\n${usage}`,
@@ -240,4 +240,12 @@ export function formatReactionTime(ms: number): string {
   const min = Math.floor(sec / 60);
   const rest = Math.round(sec % 60);
   return `${min} мин ${rest} сек`;
+}
+
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

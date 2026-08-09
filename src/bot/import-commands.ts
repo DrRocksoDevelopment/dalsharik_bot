@@ -43,8 +43,9 @@ export async function listImportFiles(dir: string): Promise<string[]> {
   let entries: string[];
   try {
     entries = await fs.readdir(dir);
-  } catch {
-    return [];
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
   }
   const files = entries.filter((name) => /\.json$/i.test(name));
   files.sort();
