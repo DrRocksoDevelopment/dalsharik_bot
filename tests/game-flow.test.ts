@@ -93,6 +93,6 @@ describe('игровой цикл', () => {
     await finalizer.finalize((await t.store.polls.get('poll-rec-1'))!);
 
     expect(calls.lastText).toContain('🏆 За этот вопрос');
-    expect(calls.lastText).toMatch(/Варианты:\n🟥 A — 1\n🟧 B — 0\n🟩 C — 1\n🟦 D — 0/);
+    expect(calls.lastText).toMatch(/Варианты:\n🔴 A — 1\n🔴 B — 0\n🟢 C — 1\n🔴 D — 0/);
   });
 });

@@ -1,4 +1,5 @@
 import { getEnv } from './config/config.js';
+import { join } from 'node:path';
 
 const env = getEnv();
 import { createBot } from './bot/bot.js';
@@ -87,6 +88,7 @@ export async function main(): Promise<void> {
     logger,
     adminId: env.botAdminId,
     reloader,
+    importDir: join(env.dataDir, 'imports'),
   });
 
   scheduler = new DefaultScheduler({ logger, store, publisher, finalizer });

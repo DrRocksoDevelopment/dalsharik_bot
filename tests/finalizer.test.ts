@@ -220,7 +220,7 @@ describe('results message', () => {
     expect(text).toContain('⏭ Следующее событие — в 15:00 по местному времени');
   });
 
-  it('использует единообразные эмодзи для списка вариантов', () => {
+  it('подсвечивает верный вариант зелёным, неверные — красным', () => {
     const question = makeQuestion();
     const results = calculateResults([]);
 
@@ -231,9 +231,9 @@ describe('results message', () => {
       slogan: '«История решила иначе.»',
     });
 
-    expect(text).toContain('🟥 A — 0');
-    expect(text).toContain('🟧 B — 0');
-    expect(text).toContain('🟩 C — 0');
-    expect(text).toContain('🟦 D — 0');
+    expect(text).toContain('🔴 A — 0');
+    expect(text).toContain('🔴 B — 0');
+    expect(text).toContain('🟢 C — 0');
+    expect(text).toContain('🔴 D — 0');
   });
 });

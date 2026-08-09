@@ -3,13 +3,6 @@ import type { Question } from '../game/question.js';
 import type { UserProfile } from '../game/user.js';
 import { formatReactionTime } from './messages.js';
 
-const OPTION_EMOJI: Record<string, string> = {
-  A: '🟥',
-  B: '🟧',
-  C: '🟩',
-  D: '🟦',
-};
-
 function displayName(user: UserProfile | undefined, userId: string): string {
   if (!user) return `@${userId}`;
   if (user.username) return `@${user.username}`;
@@ -34,8 +27,9 @@ export interface ResultsContext {
 function formatDistribution(results: QuestionResults, question: Question): string {
   const lines: string[] = [];
   for (const answer of question.answers) {
-    const emoji = OPTION_EMOJI[answer.id] ?? answer.id;
-    lines.push(`${emoji} ${answer.id} — ${results.answerDistribution[answer.id] ?? 0}`);
+    const correct = answer.id === question.correctAnswer;
+    const marker = correct ? '🟢' : '🔴';
+    lines.push(`${marker} ${answer.id} — ${results.answerDistribution[answer.id] ?? 0}`);
   }
   return lines.join('\n');
 }

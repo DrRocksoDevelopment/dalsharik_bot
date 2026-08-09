@@ -71,6 +71,42 @@ export const MESSAGES = {
   importFileTooLarge: '❌ Файл слишком большой (максимум 5 МБ).',
   importInvalidJson: (reason: string) => `❌ Не удалось разобрать файл: ${reason}`,
   importError: '❌ Ошибка при импорте вопросов. Попробуйте ещё раз.',
+  importFolderEmpty: (name?: string) =>
+    name
+      ? `❌ Файл «${name}» не найден в папке data/imports.`
+      : '📂 В папке data/imports нет .json-файлов для импорта.',
+  importFolderResult: (r: {
+    files: {
+      file: string;
+      error?: string;
+      movedTo?: string;
+      result?: {
+        imported: number;
+        renamed: { oldId: string; newId: string }[];
+        skipped: { id: string; reason: string }[];
+        errors: { id: string; errors: string[] }[];
+      };
+    }[];
+  }) => {
+    const blocks: string[] = [];
+    for (const f of r.files) {
+      const lines = [`📄 ${f.file}:`];
+      if (f.error) {
+        lines.push(`❌ ${f.error}`);
+      } else if (f.result) {
+        lines.push(`✅ Импортировано: ${f.result.imported} · Пропущено: ${f.result.skipped.length}`);
+        const renamed = f.result.renamed.slice(0, 10).map((x) => `• ${x.oldId} → ${x.newId}`);
+        if (renamed.length > 0) lines.push(`🔁 Переименовано:\n${renamed.join('\n')}`);
+        const skipped = f.result.skipped.slice(0, 10).map((s) => `• ${s.id} — ${s.reason}`);
+        if (skipped.length > 0) lines.push(`Пропущенные:\n${skipped.join('\n')}`);
+        const errors = f.result.errors.slice(0, 10).map((e) => `• ${e.id}: ${e.errors.join('; ')}`);
+        if (errors.length > 0) lines.push(`Ошибки:\n${errors.join('\n')}`);
+      }
+      if (f.movedTo) lines.push(`📁 → done/${f.movedTo}`);
+      blocks.push(lines.join('\n'));
+    }
+    return `📦 Импорт из папки data/imports (${r.files.length} файлов):\n\n${blocks.join('\n\n')}`;
+  },
   importResult: (r: {
     imported: number;
     renamed: { oldId: string; newId: string }[];
