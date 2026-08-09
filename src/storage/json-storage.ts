@@ -22,7 +22,7 @@ export class JsonStorage<T extends Identifiable> implements Storage<T> {
   private async readRaw(): Promise<T[]> {
     try {
       const raw = await fs.readFile(this.filePath, 'utf-8');
-      const parsed: unknown = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw.replace(/^\uFEFF/, ''));
       if (!Array.isArray(parsed)) {
         throw new CorruptedDataError(this.filePath, 'ожидался массив');
       }
