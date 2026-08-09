@@ -6,6 +6,7 @@ import { calculateResults } from '../src/game/stats.js';
 import { makeLogger, makePoll, makeQuestion, makeTempStore, type TempStore } from './helpers.js';
 import type { AnswerRecord } from '../src/game/answer.js';
 import type { UserProfile } from '../src/game/user.js';
+import type { ChatRecord } from '../src/game/chat.js';
 
 const tempStores: TempStore[] = [];
 
@@ -86,6 +87,40 @@ describe('finalizer', () => {
 
     const stored = await t.store.polls.get(poll.id);
     expect(stored?.status).toBe('completed');
+  });
+
+  it('не выводит NaN в превью для legacy-чата без таймзоны', async () => {
+    const t = await makeTempStore();
+    tempStores.push(t);
+    const question = makeQuestion();
+    const poll = makePoll();
+    await t.store.questions.insert(question);
+    await t.store.polls.insert(poll);
+    await t.store.chats.insert({
+      chatId: '-100123',
+      enabled: true,
+      answerWindow: 300,
+      questionInterval: 7200,
+      questionTypes: ['historical_next_event'],
+      categories: ['history'],
+      difficultyMin: 1,
+      difficultyMax: 5,
+      id: '-100123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as ChatRecord);
+
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+    });
+
+    await finalizer.finalize(poll);
+
+    expect(calls.lastText).not.toContain('NaN');
+    expect(calls.lastText).toContain('⏭ Следующее событие');
   });
 });
 
@@ -183,5 +218,22 @@ describe('results message', () => {
     });
 
     expect(text).toContain('⏭ Следующее событие — в 15:00 по местному времени');
+  });
+
+  it('использует единообразные эмодзи для списка вариантов', () => {
+    const question = makeQuestion();
+    const results = calculateResults([]);
+
+    const text = buildResultsMessage({
+      question,
+      results,
+      users: new Map(),
+      slogan: '«История решила иначе.»',
+    });
+
+    expect(text).toContain('🟥 A — 0');
+    expect(text).toContain('🟧 B — 0');
+    expect(text).toContain('🟩 C — 0');
+    expect(text).toContain('🟦 D — 0');
   });
 });

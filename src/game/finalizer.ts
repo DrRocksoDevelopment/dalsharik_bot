@@ -1,5 +1,6 @@
 import type { Logger } from 'winston';
 import type { DataStore } from '../storage/data-store.js';
+import { DEFAULT_CONFIG } from '../config/config.js';
 import type { PollRecord } from './poll.js';
 import { calculateResults } from './stats.js';
 import { buildResultsMessage } from '../content/results.js';
@@ -81,9 +82,12 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
 
     const chat = await this.deps.store.chats.get(poll.chatId);
     const now = (this.deps.now ?? Date.now)();
-    const nextEventLocalTime = chat
-      ? formatLocalTime(now + chat.questionInterval * 1000, chat.timezoneOffsetMinutes)
-      : undefined;
+    const timezoneOffset =
+      chat?.timezoneOffsetMinutes ?? DEFAULT_CONFIG.timezoneOffsetMinutes;
+    const nextEventLocalTime =
+      chat && Number.isFinite(timezoneOffset)
+        ? formatLocalTime(now + chat.questionInterval * 1000, timezoneOffset)
+        : undefined;
 
     const slogan = (this.deps.slogans ?? new SloganEngine()).get({
       isCorrect: results.correct > 0,
