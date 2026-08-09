@@ -1,0 +1,71 @@
+# Планы
+
+Технический долг и план исправлений по итогам аудита кода (09.08.2026).
+
+Статусы: `[ ]` не начато · `[~]` в работе · `[x]` готово
+
+## Надёжность и потеря данных
+
+- [x] **Падение на старте без `data/`** — `src/game/question-reloader.ts:66` вызывает `fs.watch(dataDir)`, каталог нигде не создаётся. На свежем клоне бот не запустится.
+  - Фикс: `fs.mkdir(env.dataDir, { recursive: true })` в `main()` до `reloader.start()`; `watch()` в try/catch с фолбэком на polling.
+- [x] **Опрос отправлен в Telegram до сохранения** — `src/game/publisher.ts:74-94`: `sendQuiz` → потом `polls.insert`. Падение в окне = опрос-«сирота»: ответы игнорируются, опрос не закроется, вопрос может опубликоваться повторно.
+  - Фикс: вставлять poll со статусом `'sending'` до отправки, после `sendQuiz` — `update` в `'active'`; свип зависших `'sending'`/`'finalizing'` при старте (`scheduler.recover`).
+- [x] **Гонка начисления очков/серий** — `src/game/answer-processor.ts:79-84`: `getOrCreateUser` и `users.update` — две независимые блокировки; параллельные ответы одного игрока теряют начисления, новому игроку может упасть insert.
+  - Фикс: «get-or-create + `calculatePoints` + `applyAnswerToUser`» в одном `store.users.mutate()`.
+- [x] **Финализатор ставит `completed` до side-эффектов** — `src/game/finalizer.ts:43`. После падения ретрай невозможен.
+  - Фикс: промежуточный статус `'finalizing'` → `closePoll` + итоги → `'completed'`; свип ретраит зависшие `'finalizing'`.
+- [x] **Две цепочки записи questions.json без общего лока** — `applyPool` пишет через свой `writeJson` в обход `JsonStorage.lock`; параллельные `approve`/`import` могут перетереть друг друга.
+  - Фикс: сначала backup, затем `store.questions.mutate()` под общей блокировкой.
+- [x] **Исчерпание пула без ротации** — `usedIds` = вся `questionHistory`, история растёт вечно; пустые ретраи scheduler каждые 5 мин.
+  - Фикс: окно последних N публикаций (ROTATION_WINDOW=20); при исчерпании — `selectNext` с `exclude: []`; id истории — с временем публикации.
+
+## Обработка ошибок
+
+- [x] **Unhandled rejection** — `bot.launch().then(...)` без `.catch()` (`src/index.ts:108`), нет глобальных `unhandledRejection`/`uncaughtException`, fire-and-forget `void this.reloadPool()`/`tick()`.
+  - Фикс: `try/await bot.launch()` с выходом, глобальные хендлеры, `.catch` на fire-and-forget.
+- [ ] **Глухие catch** (`permissions.ts:17`, `import-commands.ts:46`, `lock.ts:36`) — логировать warn/debug.
+- [ ] **`FileLock.acquire` при сбое оставляет блокировку навсегда** — обернуть acquire в try/catch.
+- [ ] **Конфиг-модуль читает env при импорте** (`logging/logger.ts:4`) — ленивая инициализация.
+
+## Производительность
+
+- [ ] Каждый ответ = ~8 полных чтений/перезаписей JSON под локом (индексы в памяти / SQLite).
+- [ ] `/stats` читает questions.json N раз (`leaderboard.ts:81-85`) — один `getAll()` + Map.
+- [ ] Тик планировщика = O(чатов × полных чтений) каждые 30 c — состояние в памяти.
+- [ ] Неограниченный рост `metrics.json`: массивы `chat.players`/`user.question_ids` → счётчики.
+- [ ] Бэкап вопросов перезаписывается каждые 60 c без изменений — только при изменении.
+
+## Безопасность и типы
+
+- [ ] **HTML-инъекция в `/config`** (`bot.ts:123`, `messages.ts:38`) — экранировать или слать без parse_mode.
+- [ ] Сырой markdown без parse_mode в сообщениях — включить MarkdownV2 с экранированием или убрать разметку.
+- [ ] `asStored` в `metrics-store.ts` без runtime-валидации — нормализация/валидация при чтении.
+- [ ] Лишние поля patch тихо персистятся в `json-storage.ts:87` — валидация ключей.
+- [ ] Рассинхрон: `/config` в `/help` указан «для всех», а реально суперадминский — поправить help.
+
+## Зависимости и сборка
+
+- [x] **vitest 2.x → 4.x** — чинит critical/high уязвимости (vite/esbuild/vite-node), dev-only. `npm audit`: 0 уязвимостей. Добавлен `vitest.config.mts` (include только `tests/**/*.test.ts`, чтобы vitest 4 не подхватывал скомпилированные тесты из `dist/`).
+- [x] **`@telegraf/types@^7.1.0` явно в dependencies** (сейчас транзитивно через telegraf).
+- [ ] `lint` = дубль `typecheck` — реальный линтер (eslint) или убрать.
+- [ ] `rootDir: "."` собирает в dist также `tests/` и `scripts/` — поправить.
+- [ ] Удалить легаси `data/stats.json`.
+
+## Тесты (добавить)
+
+- [x] Гонка: параллельные `processPollAnswer` одного пользователя.
+- [x] Сбой send-before-persist (после `sendQuiz` до `polls.insert`).
+- [x] `reloader.start()` при отсутствующем dataDir.
+- [ ] `src/bot/bot.ts` (start/stop/help/config/poll_answer/бота.catch).
+- [ ] `config-commands.ts`, `moderation-commands.ts`, `stats-commands.ts`.
+- [ ] `logging/` (rate-limit, обрезка 4000).
+- [ ] `index.ts` (отсутствие env, ошибка launch, graceful shutdown).
+- [ ] Гигиена: `t.cleanup()` в `afterEach` в `scheduler.test.ts`.
+
+## Стратегия коммитов
+
+- `fix:` — надёжность (п. 1–6, обработка ошибок).
+- `perf:` — производительность.
+- `chore:` — зависимости, сборка, типы.
+- `test:` — новые тесты.
+- Перед коммитом: `npm run build` и `npm test` должны проходить (AGENTS.md).
