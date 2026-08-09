@@ -15,12 +15,21 @@ export const DEFAULT_CONFIG = {
   enabled: true,
   answerWindow: 3600,
   questionInterval: 7200,
-  questionTypes: ['historical_next_event'],
+  questionTypes: [
+    'historical_next_event',
+    'scientific_next_event',
+    'technology_next_event',
+    'business_next_event',
+    'culture_next_event',
+    'geography_next_event',
+  ],
   categories: ['history', 'science', 'technology', 'culture', 'geography'],
   difficultyMin: 1,
   difficultyMax: 5,
   timezoneOffsetMinutes: 180,
 } as const;
+
+export const LEGACY_DEFAULT_QUESTION_TYPES = ['historical_next_event'] as const;
 
 export const DIFFICULTY_POINTS: Record<number, number> = {
   1: 1,
