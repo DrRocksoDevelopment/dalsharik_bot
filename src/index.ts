@@ -1,4 +1,5 @@
 import { getEnv } from './config/config.js';
+import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 
 const env = getEnv();
@@ -23,6 +24,7 @@ import { registerImport } from './bot/import-commands.js';
 import { registerMetricsCommand } from './bot/metrics-commands.js';
 
 export async function main(): Promise<void> {
+  await fs.mkdir(env.dataDir, { recursive: true });
   const store = createDataStore();
   let bot: ReturnType<typeof createBot> | null = null;
   const logger = initLogger(() => {
@@ -105,9 +107,26 @@ export async function main(): Promise<void> {
   await scheduler.start();
   await reloader.start();
 
-  bot.launch().then(async () => {
-    const me = await bot!.telegram.getMe();
-    logger.info(`Бот запущен: @${me.username}`);
+  try {
+    await bot.launch();
+  } catch (err) {
+    logger.error('Не удалось запустить бота', { error: err instanceof Error ? err.message : String(err) });
+    await bot.stop('launch_error');
+    process.exit(1);
+  }
+  const me = await bot.telegram.getMe();
+  logger.info(`Бот запущен: @${me.username}`);
+
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled rejection', { reason: reason instanceof Error ? reason.stack ?? reason.message : String(reason) });
+  });
+  process.on('uncaughtException', (err) => {
+    logger.error('Uncaught exception', { error: err.message });
+    void (async () => {
+      await scheduler?.stop();
+      await reloader?.stop();
+      await bot?.stop('uncaught_exception');
+    })().finally(() => process.exit(1));
   });
 
   process.once('SIGINT', async () => {

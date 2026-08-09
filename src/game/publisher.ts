@@ -19,6 +19,8 @@ export interface QuestionPublisherDeps {
   now?: () => number;
 }
 
+const ROTATION_WINDOW = 20;
+
 export interface QuestionPublisher {
   publish(chat: ChatConfig): Promise<PollRecord | null>;
   buildQuizPayload(question: Question): {
@@ -48,18 +50,37 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
 
   async publish(chat: ChatConfig): Promise<PollRecord | null> {
     const history = await this.deps.store.questionHistory.find((h) => h.chatId === chat.chatId);
-    const usedIds = new Set(history.map((h) => h.questionId));
+    const sorted = [...history].sort(
+      (a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
+    );
+    const window = sorted.slice(0, ROTATION_WINDOW);
+    const usedIds = window.map((h) => h.questionId);
+    const recentIds = window.map((h) => h.questionId);
 
-    const question = await this.deps.engine.selectNext({
+    const selector = {
       questionTypes: chat.questionTypes,
       categories: chat.categories,
       difficultyMin: chat.difficultyMin,
       difficultyMax: chat.difficultyMax,
-      excludeQuestionIds: [...usedIds],
-      recentQuestionIds: history.map((h) => h.questionId),
+      recentQuestionIds: recentIds,
       now: (this.deps.now ?? Date.now)(),
       timezoneOffsetMinutes: chat.timezoneOffsetMinutes,
+    };
+
+    let question = await this.deps.engine.selectNext({
+      ...selector,
+      excludeQuestionIds: usedIds,
     });
+
+    if (!question) {
+      this.deps.logger.debug('Пул в окне ротации исчерпан, разрешаю повторное использование', {
+        chatId: chat.chatId,
+      });
+      question = await this.deps.engine.selectNext({
+        ...selector,
+        excludeQuestionIds: [],
+      });
+    }
 
     if (!question) {
       this.deps.logger.warn('Нет доступных вопросов для чата', { chatId: chat.chatId });
@@ -71,6 +92,20 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
     const createdAt = new Date(now).toISOString();
     const expiresAt = new Date(now + chat.answerWindow * 1000).toISOString();
 
+    const poll: PollRecord = {
+      id: randomUUID(),
+      telegramPollId: '',
+      chatId: chat.chatId,
+      questionId: question.id,
+      messageId: 0,
+      optionMap: payload.optionMap,
+      createdAt,
+      expiresAt,
+      status: 'sending',
+    };
+
+    await this.deps.store.polls.insert(poll);
+
     const sent = await this.deps.sender.sendQuiz({
       chatId: chat.chatId,
       text: payload.text,
@@ -79,21 +114,14 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
       explanation: payload.explanation,
     });
 
-    const poll: PollRecord = {
-      id: randomUUID(),
+    await this.deps.store.polls.update(poll.id, {
       telegramPollId: sent.pollId,
-      chatId: chat.chatId,
-      questionId: question.id,
       messageId: sent.messageId,
-      optionMap: payload.optionMap,
-      createdAt,
-      expiresAt,
       status: 'active',
-    };
+    });
 
-    await this.deps.store.polls.insert(poll);
     await this.deps.store.questionHistory.insert({
-      id: `${chat.chatId}:${question.id}`,
+      id: `${chat.chatId}:${question.id}:${createdAt}`,
       chatId: chat.chatId,
       questionId: question.id,
       publishedAt: createdAt,

@@ -40,7 +40,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       return;
     }
 
-    await this.deps.store.polls.update(poll.id, { status: 'completed' });
+    await this.deps.store.polls.update(poll.id, { status: 'finalizing' });
 
     let totalVoterCount = 0;
     try {
@@ -130,5 +130,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       poll.questionId,
       totalVoterCount > 0 ? totalVoterCount : results.totalPlayers,
     );
+
+    await this.deps.store.polls.update(poll.id, { status: 'completed' });
   }
 }

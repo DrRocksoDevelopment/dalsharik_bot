@@ -59,7 +59,11 @@ export class DefaultScheduler implements Scheduler {
     this.running = true;
     await this.recover();
     this.tickTimer = setInterval(() => {
-      void this.tick();
+      void this.tick().catch((err) => {
+        this.deps.logger.error('Ошибка тика планировщика', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
     }, this.tickIntervalMs);
     if (typeof this.tickTimer.unref === 'function') this.tickTimer.unref();
     this.deps.logger.info('Scheduler запущен');
@@ -80,6 +84,18 @@ export class DefaultScheduler implements Scheduler {
   }
 
   async recover(): Promise<void> {
+    const sending = await this.deps.store.polls.find((p) => p.status === 'sending');
+    for (const poll of sending) {
+      this.deps.logger.info('Очистка зависшего poll (отправка не завершена)', { pollId: poll.id });
+      await this.deps.store.polls.delete(poll.id);
+    }
+
+    const finalizing = await this.deps.store.polls.find((p) => p.status === 'finalizing');
+    for (const poll of finalizing) {
+      this.deps.logger.info('Восстановление: повторяю завершение зависшего poll', { pollId: poll.id });
+      await this.finalizeAndScheduleNext(poll);
+    }
+
     const activePolls = await this.deps.store.polls.find((p) => p.status === 'active');
     const now = this.now();
     for (const poll of activePolls) {

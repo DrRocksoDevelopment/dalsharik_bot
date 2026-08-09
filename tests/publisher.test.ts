@@ -55,13 +55,13 @@ describe('publisher', () => {
     expect(history[0]!.questionId).toBe('event_000001');
   });
 
-  it('не публикует повторно использованный в чате вопрос', async () => {
+  it('повторно публикует вопрос после исчерпания окна ротации', async () => {
     const t = await makeTempStore();
     tempStores.push(t);
     const question = makeQuestion();
     await t.store.questions.insert(question);
     await t.store.questionHistory.insert({
-      id: '-100123:event_000001',
+      id: '-100123:event_000001:2026-01-01T00:00:00.000Z',
       chatId: '-100123',
       questionId: 'event_000001',
       publishedAt: '2026-01-01T00:00:00.000Z',
@@ -75,6 +75,10 @@ describe('publisher', () => {
     });
 
     const poll = await publisher.publish(defaultChatConfig('-100123'));
-    expect(poll).toBeNull();
+    expect(poll).not.toBeNull();
+    expect(poll!.questionId).toBe('event_000001');
+
+    const history = await t.store.questionHistory.find((h) => h.chatId === '-100123');
+    expect(history).toHaveLength(2);
   });
 });

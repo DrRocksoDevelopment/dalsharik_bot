@@ -2,7 +2,7 @@ import type { Logger } from 'winston';
 import type { DataStore } from '../storage/data-store.js';
 import type { PollAnswer } from '@telegraf/types';
 import { calculatePoints } from './scoring.js';
-import { getOrCreateUser, applyAnswerToUser, type TelegramUserInfo } from './user-service.js';
+import { newUserProfile, applyAnswerToUser } from './user-service.js';
 import type { AnswerRecord } from './answer.js';
 import type { MetricsStore } from '../metrics/metrics.js';
 
@@ -76,20 +76,55 @@ export async function processPollAnswer(
     : Math.max(0, answeredAtMs - pollCreatedAt);
 
   const alreadyAnswered = await isRepeat(deps.store, userId, question.id);
-  const user = await getOrCreateUser(deps.store, {
-    id: userInfo.id,
-    username: userInfo.username,
-    first_name: userInfo.first_name,
-    last_name: userInfo.last_name,
-  });
-
   const isCorrect = selectedOption === question.correctAnswer;
-  const pointsResult = calculatePoints({
-    difficulty: question.difficulty,
-    streak: user.currentStreak,
-    alreadyAnswered,
+
+  let points = 0;
+  let isRepeatAnswer = alreadyAnswered;
+  let score = 0;
+  let currentStreak = 0;
+  let bestStreak = 0;
+  await deps.store.users.mutate((users) => {
+    let user = users.find((u) => u.id === userId);
+    if (!user) {
+      user = newUserProfile({
+        id: userInfo.id,
+        username: userInfo.username,
+        first_name: userInfo.first_name,
+        last_name: userInfo.last_name,
+      });
+      user.createdAt = new Date(answeredAtMs).toISOString();
+      users.push(user);
+    } else if (
+      userInfo.username !== user.username ||
+      userInfo.first_name !== user.firstName ||
+      userInfo.last_name !== user.lastName
+    ) {
+      user.username = userInfo.username;
+      user.firstName = userInfo.first_name;
+      user.lastName = userInfo.last_name;
+    }
+
+    const pointsResult = calculatePoints({
+      difficulty: question.difficulty,
+      streak: user.currentStreak,
+      alreadyAnswered,
+    });
+    isRepeatAnswer = pointsResult.isRepeat;
+    points = isCorrect ? pointsResult.points : 0;
+    const applied = applyAnswerToUser(user, isCorrect, isRepeatAnswer, points);
+    score = applied.score;
+    currentStreak = applied.currentStreak;
+    bestStreak = applied.bestStreak;
+
+    user.score = applied.score;
+    user.currentStreak = applied.currentStreak;
+    user.bestStreak = applied.bestStreak;
+    user.streakMultiplier = applied.streakMultiplier;
+    user.answers += 1;
+    user.correct += isCorrect ? 1 : 0;
+    user.wrong += isCorrect ? 0 : 1;
+    user.updatedAt = new Date(answeredAtMs).toISOString();
   });
-  const points = isCorrect ? pointsResult.points : 0;
 
   const answer: AnswerRecord = {
     id: `${telegramPollId}:${userId}`,
@@ -102,19 +137,10 @@ export async function processPollAnswer(
     answeredAt: new Date(answeredAtMs).toISOString(),
     reactionTimeMs,
     points,
-    isRepeat: pointsResult.isRepeat,
+    isRepeat: isRepeatAnswer,
     updateId,
   };
   await deps.store.answers.insert(answer);
-
-  const next = applyAnswerToUser(user, isCorrect, pointsResult.isRepeat, points);
-  await deps.store.users.update(user.id, {
-    ...next,
-    answers: user.answers + 1,
-    correct: user.correct + (isCorrect ? 1 : 0),
-    wrong: user.wrong + (isCorrect ? 0 : 1),
-    updatedAt: new Date(answeredAtMs).toISOString(),
-  });
 
   await deps.metrics?.recordAnswer({
     userId,
@@ -123,9 +149,9 @@ export async function processPollAnswer(
     isCorrect,
     reactionTimeMs,
     selectedOption,
-    score: next.score,
-    currentStreak: next.currentStreak,
-    bestStreak: next.bestStreak,
+    score,
+    currentStreak,
+    bestStreak,
   });
 
   deps.logger.info('Ответ обработан', {
@@ -134,7 +160,7 @@ export async function processPollAnswer(
     questionId: question.id,
     isCorrect,
     points,
-    isRepeat: pointsResult.isRepeat,
+    isRepeat: isRepeatAnswer,
     reactionTimeMs,
   });
 }

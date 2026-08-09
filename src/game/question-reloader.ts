@@ -63,17 +63,33 @@ export class QuestionReloader {
   async start(): Promise<void> {
     await this.refresh();
 
-    const watcher = watch(this.deps.dataDir, (event, filename) => {
-      if (filename === 'questions.json') void this.reloadPool();
-      if (filename === 'questions_pending.json') void this.checkPending();
-    });
-    watcher.on('error', (err) => {
-      this.deps.logger.error('Ошибка fs.watch вопросов', { error: String(err) });
-    });
-    this.watchers.push(watcher);
+    try {
+      const watcher = watch(this.deps.dataDir, (event, filename) => {
+        if (filename === 'questions.json') {
+          void this.reloadPool().catch((err) => {
+            this.deps.logger.error('Ошибка перезагрузки по событию fs.watch', { error: String(err) });
+          });
+        }
+        if (filename === 'questions_pending.json') {
+          void this.checkPending().catch((err) => {
+            this.deps.logger.error('Ошибка проверки pending по событию fs.watch', { error: String(err) });
+          });
+        }
+      });
+      watcher.on('error', (err) => {
+        this.deps.logger.error('Ошибка fs.watch вопросов', { error: String(err) });
+      });
+      this.watchers.push(watcher);
+    } catch (err) {
+      this.deps.logger.warn('fs.watch недоступен, работаю только по polling', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     this.timer = setInterval(() => {
-      void this.refresh();
+      void this.refresh().catch((err) => {
+        this.deps.logger.error('Ошибка периодического refresh вопросов', { error: String(err) });
+      });
     }, POLL_INTERVAL_MS);
     this.timer.unref();
   }
@@ -194,8 +210,11 @@ export class QuestionReloader {
   }
 
   private async applyPool(next: Question[]): Promise<void> {
-    await this.writeJson(this.questionsFile, next);
     await this.writeJson(this.backupFile, next);
+    await this.deps.store.questions.mutate((items) => {
+      items.splice(0, items.length);
+      items.push(...next);
+    });
     this.lastGoodPool = next;
     this.deps.engine.updatePool(next);
   }

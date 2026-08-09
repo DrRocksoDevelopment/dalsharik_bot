@@ -1,4 +1,3 @@
-import type { DataStore } from '../storage/data-store.js';
 import type { UserProfile } from './user.js';
 import { calculateStreakMultiplier } from './scoring.js';
 
@@ -27,28 +26,6 @@ export function newUserProfile(user: TelegramUserInfo): UserProfile {
     createdAt: now,
     updatedAt: now,
   };
-}
-
-export async function getOrCreateUser(
-  store: DataStore,
-  user: TelegramUserInfo,
-): Promise<UserProfile> {
-  const id = String(user.id);
-  const existing = await store.users.get(id);
-  if (existing) {
-    if (user.username !== existing.username || user.first_name !== existing.firstName) {
-      await store.users.update(id, {
-        username: user.username,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        updatedAt: new Date().toISOString(),
-      });
-    }
-    return existing;
-  }
-  const profile = newUserProfile(user);
-  await store.users.insert(profile);
-  return profile;
 }
 
 export interface UserAfterAnswer {
