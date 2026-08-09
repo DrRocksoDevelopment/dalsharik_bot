@@ -19,10 +19,10 @@
     "test:coverage": "vitest run --coverage",
     "seed": "tsx scripts/seed.ts",
     "validate-questions": "tsx scripts/validate-questions.ts",
-    "release:patch": "npm version patch -m \"chore: релиз версии %s\"",
-    "release:minor": "npm version minor -m \"chore: релиз версии %s\"",
-    "release:major": "npm version major -m \"chore: релиз версии %s\"",
-    "release:push": "git push origin main --follow-tags"
+    "release:patch": "npm run build && npm test && tsx scripts/check-changelog.ts patch && npm version patch -m \"chore: релиз версии %s\"",
+    "release:minor": "npm run build && npm test && tsx scripts/check-changelog.ts minor && npm version minor -m \"chore: релиз версии %s\"",
+    "release:major": "npm run build && npm test && tsx scripts/check-changelog.ts major && npm version major -m \"chore: релиз версии %s\"",
+    "release:push": "git push origin main --follow-tags && git push origin develop && tsx scripts/create-release.ts"
   },
   "dependencies": {
     "@telegraf/types": "^7.1.0",

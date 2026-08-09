@@ -38,6 +38,8 @@
 ## Релизы
 
 - Версия — семантическое версионирование (major.minor.patch).
-- Скрипты: `npm run release:patch|minor|major` — bump версии, коммит и тег `v<version>`.
-- `npm run release:push` — пуш ветки и тегов в origin.
+- `CHANGELOG.md` — Keep a Changelog. При каждой функциональной правке запись в `## [Unreleased]`; перед релизом перенести её в `## [v<version>] — <дата>` и закоммитить.
+- Скрипты:
+  - `npm run release:patch|minor|major` — сборка, тесты, проверка секции новой версии в `CHANGELOG.md` (без неё релиз не пройдёт), bump версии, коммит и тег `v<version>`.
+  - `npm run release:push` — пуш `main`, `develop` и тегов в origin, автосоздание GitHub-релиза из секции ченджелога (`gh release create|edit`).
 - Для MVP допускается релиз напрямую из `main` через `release:patch`.
