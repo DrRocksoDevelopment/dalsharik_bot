@@ -137,6 +137,8 @@ export async function makeBotHarness(): Promise<BotHarness> {
       case 'answerCallbackQuery':
         answerCbQuery(payload);
         return Promise.resolve(true);
+      case 'getFile':
+        return Promise.resolve({ file_id: payload.file_id, file_path: 'import/questions.json' });
       case 'getChatAdministrators':
         getChatAdministrators(payload.chat_id);
         return Promise.resolve([]);
@@ -208,6 +210,35 @@ export function callbackUpdate(
       },
       chat_instance: '1',
       data,
+    },
+  } as unknown as Update;
+}
+
+export function documentUpdate(
+  opts: {
+    fromId?: number;
+    chatType?: 'private' | 'group' | 'supergroup';
+    fileSize?: number;
+    fileName?: string;
+  } = {},
+): Update {
+  return {
+    update_id: 3,
+    message: {
+      message_id: 2,
+      from: { id: opts.fromId ?? 42, is_bot: false, first_name: 'Test', username: 'tester' },
+      chat: {
+        id: opts.fromId ?? 42,
+        type: opts.chatType ?? 'private',
+        first_name: 'Test',
+      },
+      date: 0,
+      document: {
+        file_id: 'file-1',
+        file_name: opts.fileName ?? 'questions.json',
+        file_size: opts.fileSize ?? 1024,
+        mime_type: 'application/json',
+      },
     },
   } as unknown as Update;
 }
