@@ -5,7 +5,7 @@ import type { PollAnswer } from '@telegraf/types';
 import { MESSAGES } from '../content/messages.js';
 import { registerConfigCommands } from './config-commands.js';
 import { registerStatsCommands } from './stats-commands.js';
-import { getOrCreateChat, isGroupChat } from './chat-utils.js';
+import { getOrCreateChat, isGroupChat, normalizeChatConfig } from './chat-utils.js';
 
 export interface BotDeps {
   logger: Logger;
@@ -81,11 +81,12 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
   bot.command('config', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId) return;
-    const cfg = await deps.store.chats.get(chatId);
-    if (!cfg) {
+    const stored = await deps.store.chats.get(chatId);
+    if (!stored) {
       await ctx.reply(MESSAGES.noConfig);
       return;
     }
+    const cfg = normalizeChatConfig(stored);
     await ctx.reply(MESSAGES.config(cfg as unknown as Record<string, unknown>), {
       parse_mode: 'HTML',
     });

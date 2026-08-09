@@ -4,10 +4,10 @@ import type { UserProfile } from '../game/user.js';
 import { formatReactionTime } from './messages.js';
 
 const OPTION_EMOJI: Record<string, string> = {
-  A: '🅰️',
-  B: '🅱️',
-  C: '🅲',
-  D: '🅳',
+  A: '🟥',
+  B: '🟧',
+  C: '🟩',
+  D: '🟦',
 };
 
 function displayName(user: UserProfile | undefined, userId: string): string {
@@ -35,7 +35,7 @@ function formatDistribution(results: QuestionResults, question: Question): strin
   const lines: string[] = [];
   for (const answer of question.answers) {
     const emoji = OPTION_EMOJI[answer.id] ?? answer.id;
-    lines.push(`${emoji} ${results.answerDistribution[answer.id] ?? 0}`);
+    lines.push(`${emoji} ${answer.id} — ${results.answerDistribution[answer.id] ?? 0}`);
   }
   return lines.join('\n');
 }
