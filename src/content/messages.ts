@@ -1,6 +1,26 @@
 export const MESSAGES = {
   start: (botName: string) =>
-    `🎯 Дальшарик готов играть!\n\nЯ публикую событие, а вы угадываете, что было дальше.\n\nКоманды:\n/start — включить\n/stop — выключить\n/config — показать конфигурацию\n/set_answer_window <сек> — окно ответов\n/set_interval <сек> — интервал между вопросами\n/set_types <тип1,тип2> — типы вопросов\n/set_difficulty <мин> <макс> — диапазон сложности`,
+    `🎯 Привет! Я *${botName}* — бот групповой викторины «Что было дальше?».\n\n` +
+    `📜 Я публикую реальное событие, а вы угадываете, что произошло *дальше*.\n\n` +
+    `✨ Чем я отличаюсь от обычных ботов-викторин:\n` +
+    `• Не проверка фактов «когда/где/кто» — а логика и интуиция: «я знаю, что случилось, но что было дальше?»\n` +
+    `• Все события реальные, после раунда — объяснение и источники\n` +
+    `• Уровни сложности: от 🟢 до 🔴\n\n` +
+    `🤖 Автоматика:\n` +
+    `• Вопросы приходят сами по заданному интервалу\n` +
+    `• Окно ответов настраивается (по умолчанию 1 час)\n` +
+    `• После закрытия опроса — результаты: очки, скорость реакции, серии\n\n` +
+    `Справка по командам — /help`,
+  help: (botName: string) =>
+    `📖 Команды *${botName}*:\n\n` +
+    `/start — описание бота\n` +
+    `/help — эта справка\n` +
+    `/stop — остановить игру в группе\n` +
+    `/config — показать конфигурацию\n` +
+    `/set_answer_window <сек> — окно ответов (мин 60)\n` +
+    `/set_interval <сек> — интервал между вопросами (мин 60)\n` +
+    `/set_types <тип1,тип2> — типы вопросов\n` +
+    `/set_difficulty <мин> <макс> — диапазон сложности 1–5`,
   stop: '⏹ Игра в этой группе остановлена.',
   enabled: '✅ Бот включён.',
   config: (cfg: Record<string, unknown>) => `<pre>${JSON.stringify(cfg, null, 2)}</pre>`,
@@ -33,13 +53,27 @@ export const MESSAGES = {
     `${q.event.context}\n\n` +
     `❓ *${q.question}*\n\n` +
     q.answers.map((a) => `• ${a.text}${a.id === q.correctAnswer ? ' ✅' : ''}`).join('\n') +
-    `\n\nСложность: ${q.difficulty}/5 · Категория: ${q.category}\n` +
+    `\n\n${formatDifficulty(q.difficulty)} · Категория: ${q.category}\n` +
     `Тип: ${q.type}\n\n` +
     `Объяснение: ${q.explanation}\n` +
     `Источники: ${q.sources.join(', ')}`,
   approved: '✅ Вопрос одобрен и добавлен в пул.',
   rejected: '🚫 Вопрос отклонён.',
 } as const;
+
+const DIFFICULTY_EMOJI: Record<number, string> = {
+  1: '🟢',
+  2: '🟢',
+  3: '🟡',
+  4: '🟠',
+  5: '🔴',
+};
+
+export function formatDifficulty(difficulty: number): string {
+  const emoji = DIFFICULTY_EMOJI[difficulty] ?? '⚪';
+  const bar = '▰'.repeat(difficulty) + '▱'.repeat(Math.max(0, 5 - difficulty));
+  return `${emoji} Сложность: ${bar} ${difficulty}/5`;
+}
 
 export function formatReactionTime(ms: number): string {
   const sec = ms / 1000;

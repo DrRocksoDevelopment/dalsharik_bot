@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'winston';
+import { formatDifficulty } from '../content/messages.js';
 import type { DataStore } from '../storage/data-store.js';
 import type { ChatConfig } from '../types/index.js';
 import type { Question } from './question.js';
@@ -41,7 +42,7 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
     const optionMap = order.map((a) => a.id);
     const options = order.map((a) => a.text);
     const correctOptionId = order.findIndex((a) => a.id === question.correctAnswer);
-    const text = `${question.event.title}\n\n${question.question}`;
+    const text = `${question.event.title}\n\n${question.question}\n\n${formatDifficulty(question.difficulty)}`;
     return { text, options, correctOptionId, explanation: question.explanation, optionMap };
   }
 

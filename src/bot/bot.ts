@@ -60,6 +60,10 @@ export function createBot(token: string, deps: BotDeps): Telegraf {
     await ctx.reply(MESSAGES.start(ctx.botInfo?.first_name ?? 'Дальшарик'));
   });
 
+  bot.command('help', async (ctx) => {
+    await ctx.reply(MESSAGES.help(ctx.botInfo?.first_name ?? 'Дальшарик'));
+  });
+
   bot.command('stop', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
     if (!chatId) return;
