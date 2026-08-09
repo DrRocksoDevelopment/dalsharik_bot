@@ -48,13 +48,25 @@ export class InMemoryQuestionEngine implements QuestionEngine {
       options.difficultyMax,
     );
 
-    const eligible = this.pool.filter((q) => {
+    let eligible = this.pool.filter((q) => {
       if (!options.questionTypes.includes(q.type)) return false;
       if (!options.categories.includes(q.category)) return false;
       if (q.difficulty < effective.min || q.difficulty > effective.max) return false;
       if (options.excludeQuestionIds.includes(q.id)) return false;
       return true;
     });
+
+    if (eligible.length === 0) {
+      eligible = this.pool.filter((q) => {
+        if (!options.questionTypes.includes(q.type)) return false;
+        if (!options.categories.includes(q.category)) return false;
+        if (q.difficulty < options.difficultyMin || q.difficulty > options.difficultyMax) {
+          return false;
+        }
+        if (options.excludeQuestionIds.includes(q.id)) return false;
+        return true;
+      });
+    }
 
     if (eligible.length === 0) return null;
 

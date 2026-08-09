@@ -72,6 +72,38 @@ describe('question engine', () => {
     expect(picked?.id).toBe('d4');
   });
 
+  it('при вечернем окне, когда вопросы не проходят фильтр времени суток, использует фолбэк на диапазон чата', async () => {
+    const engine = new InMemoryQuestionEngine([
+      makeQuestion({ id: 'e1', difficulty: 2 }),
+      makeQuestion({ id: 'e2', difficulty: 2 }),
+    ]);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const utcEvening = Date.parse('2026-08-09T18:00:00.000Z');
+    const picked = await engine.selectNext({
+      ...OPTS,
+      now: utcEvening,
+      timezoneOffsetMinutes: 180,
+      excludeQuestionIds: ['e1'],
+    });
+    expect(picked?.id).toBe('e2');
+  });
+
+  it('возвращает null, если вопросов нет даже с фолбэком на диапазон чата', async () => {
+    const engine = new InMemoryQuestionEngine([
+      makeQuestion({ id: 'q1', type: 'scientific_next_event' }),
+    ]);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const utcEvening = Date.parse('2026-08-09T18:00:00.000Z');
+    const picked = await engine.selectNext({
+      ...OPTS,
+      now: utcEvening,
+      timezoneOffsetMinutes: 180,
+    });
+    expect(picked).toBeNull();
+  });
+
   it('балансирует категории: редко использованная категория получает больший вес', async () => {
     const recentHistoryIds = ['h1', 'h2', 'h3', 'h4'];
     const engine = new InMemoryQuestionEngine([
