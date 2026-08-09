@@ -37,6 +37,7 @@ export interface ChatConfig {
   categories: Category[];
   difficultyMin: number;
   difficultyMax: number;
+  timezoneOffsetMinutes: number;
 }
 
 export function defaultChatConfig(chatId: string): ChatConfig {
@@ -49,6 +50,7 @@ export function defaultChatConfig(chatId: string): ChatConfig {
     categories: [...DEFAULT_CONFIG.categories],
     difficultyMin: DEFAULT_CONFIG.difficultyMin,
     difficultyMax: DEFAULT_CONFIG.difficultyMax,
+    timezoneOffsetMinutes: DEFAULT_CONFIG.timezoneOffsetMinutes,
   };
 }
 
@@ -63,6 +65,7 @@ export function isValidChatConfig(cfg: unknown): cfg is ChatConfig {
     Array.isArray(c.questionTypes) &&
     Array.isArray(c.categories) &&
     typeof c.difficultyMin === 'number' &&
-    typeof c.difficultyMax === 'number'
+    typeof c.difficultyMax === 'number' &&
+    (typeof c.timezoneOffsetMinutes === 'number' || c.timezoneOffsetMinutes === undefined)
   );
 }

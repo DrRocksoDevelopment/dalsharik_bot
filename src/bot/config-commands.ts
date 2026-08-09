@@ -4,6 +4,7 @@ import type { DataStore } from '../storage/data-store.js';
 import { isQuestionType } from '../types/index.js';
 import { MESSAGES } from '../content/messages.js';
 import { isGroupChat } from './chat-utils.js';
+import { formatTimezoneOffset, parseTimezoneOffset } from '../utils/timezone.js';
 
 export interface ConfigCommandsDeps {
   logger: Logger;
@@ -91,5 +92,27 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
     deps.logger.info('Установлен диапазон сложности', { chatId, min, max });
     await deps.onChatChanged?.(chatId);
     await ctx.reply(MESSAGES.configUpdated('difficulty', `${min}–${max}`));
+  });
+
+  bot.command('set_timezone', async (ctx) => {
+    const chatId = ctx.chat?.id.toString();
+    if (!chatId || !isGroupChat(ctx.chat?.type)) return;
+    const raw = ctx.message.text.split(/\s+/)[1];
+    if (raw === undefined) {
+      await ctx.reply(MESSAGES.invalidValue('/set_timezone +3'));
+      return;
+    }
+    const offset = parseTimezoneOffset(raw);
+    if (offset === null) {
+      await ctx.reply(MESSAGES.invalidTimeZone);
+      return;
+    }
+    await deps.store.chats.update(chatId, {
+      timezoneOffsetMinutes: offset,
+      updatedAt: new Date().toISOString(),
+    });
+    deps.logger.info('Установлен часовой пояс', { chatId, offset });
+    await deps.onChatChanged?.(chatId);
+    await ctx.reply(MESSAGES.configUpdated('timezone', formatTimezoneOffset(offset)));
   });
 }

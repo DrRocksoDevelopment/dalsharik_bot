@@ -56,6 +56,9 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
       difficultyMin: chat.difficultyMin,
       difficultyMax: chat.difficultyMax,
       excludeQuestionIds: [...usedIds],
+      recentQuestionIds: history.map((h) => h.questionId),
+      now: (this.deps.now ?? Date.now)(),
+      timezoneOffsetMinutes: chat.timezoneOffsetMinutes,
     });
 
     if (!question) {

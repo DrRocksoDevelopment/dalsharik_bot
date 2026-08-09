@@ -19,6 +19,7 @@ function makeChat(chatId: string, overrides: Partial<ChatConfig> = {}): ChatReco
     categories: ['history'],
     difficultyMin: 1,
     difficultyMax: 5,
+    timezoneOffsetMinutes: 180,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,

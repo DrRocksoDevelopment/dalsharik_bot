@@ -19,6 +19,7 @@ export const DEFAULT_CONFIG = {
   categories: ['history', 'science', 'technology', 'culture', 'geography'],
   difficultyMin: 1,
   difficultyMax: 5,
+  timezoneOffsetMinutes: 180,
 } as const;
 
 export const DIFFICULTY_POINTS: Record<number, number> = {
