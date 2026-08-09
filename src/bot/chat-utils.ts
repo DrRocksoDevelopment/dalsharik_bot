@@ -57,7 +57,10 @@ export async function getOrCreateChat(
       patch.questionTypes = record.questionTypes;
     }
     if (Object.keys(patch).length > 1) {
-      await store.chats.update(existing.id, patch);
+      await store.chats.mutate((items) => {
+        const idx = items.findIndex((c) => c.id === existing.id);
+        if (idx !== -1) items[idx] = record as ChatRecord;
+      });
     }
     return record;
   }

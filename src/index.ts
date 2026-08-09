@@ -1,6 +1,7 @@
 import { getEnv } from './config/config.js';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const env = getEnv();
 import { createBot } from './bot/bot.js';
@@ -141,7 +142,13 @@ export async function main(): Promise<void> {
   });
 }
 
-main().catch((err) => {
-  console.error('Ошибка запуска:', err);
-  process.exit(1);
-});
+const isEntrypoint =
+  typeof process.argv[1] === 'string' &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isEntrypoint) {
+  main().catch((err) => {
+    console.error('Ошибка запуска:', err);
+    process.exit(1);
+  });
+}

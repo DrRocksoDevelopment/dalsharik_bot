@@ -127,7 +127,7 @@ describe('scheduler', () => {
   });
 
   it('восстанавливает таймер активного poll и завершает по истечении', async () => {
-    await t.store.polls.insert(makeActivePoll('-100123', { id: 'future', expiresInMs: 60 }));
+    await t.store.polls.insert(makeActivePoll('-100123', { id: 'future', expiresInMs: 1500 }));
     const { publisher } = makePublisher(t.store, []);
     const { finalizer, finalized } = makeFinalizer(t.store);
 
@@ -140,7 +140,7 @@ describe('scheduler', () => {
     await scheduler.start();
 
     expect(finalized).toHaveLength(0);
-    await sleep(150);
+    await sleep(1700);
     expect(finalized).toEqual(['future']);
 
     await scheduler.stop();

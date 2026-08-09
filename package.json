@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Дальшарик — Telegram-бот для групповой викторины «Что было дальше?»",
   "private": true,
+  "type": "module",
   "main": "dist/index.js",
   "engines": {
     "node": ">=20"
