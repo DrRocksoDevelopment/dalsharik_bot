@@ -1,3 +1,11 @@
+export interface DayMetrics {
+  questions_published: number;
+  questions_completed: number;
+  answers: number;
+  correct: number;
+  wrong: number;
+}
+
 export interface GameMetrics {
   questions_published: number;
   questions_completed: number;
@@ -6,8 +14,13 @@ export interface GameMetrics {
   wrong_answers: number;
   average_reaction_time: number;
   median_reaction_time: number;
+  median_correct_reaction_time: number;
+  median_wrong_reaction_time: number;
   fastest_correct_answer: number | null;
   slowest_correct_answer: number | null;
+  rounds_count: number;
+  average_round_participants: number;
+  daily: Record<string, DayMetrics>;
 }
 
 export interface UserMetrics {
@@ -18,6 +31,8 @@ export interface UserMetrics {
   score: number;
   current_streak: number;
   best_streak: number;
+  first_seen: number | null;
+  last_seen: number | null;
 }
 
 export interface ChatMetrics {
@@ -26,6 +41,8 @@ export interface ChatMetrics {
   answers_per_day: number;
   average_accuracy: number;
   average_response_time: number;
+  rounds_count: number;
+  average_round_participants: number;
 }
 
 export interface QuestionMetrics {
@@ -34,6 +51,16 @@ export interface QuestionMetrics {
   correct_rate: number;
   average_response_time: number;
   answer_distribution: Record<string, number>;
+  type: string | null;
+  category: string | null;
+  difficulty: number | null;
+}
+
+export interface QuestionMeta {
+  id: string;
+  type: string;
+  category: string;
+  difficulty: number;
 }
 
 export interface MetricsSnapshot {
@@ -52,8 +79,13 @@ export function emptyGameMetrics(): GameMetrics {
     wrong_answers: 0,
     average_reaction_time: 0,
     median_reaction_time: 0,
+    median_correct_reaction_time: 0,
+    median_wrong_reaction_time: 0,
     fastest_correct_answer: null,
     slowest_correct_answer: null,
+    rounds_count: 0,
+    average_round_participants: 0,
+    daily: {},
   };
 }
 
@@ -66,6 +98,8 @@ export function emptyUserMetrics(): UserMetrics {
     score: 0,
     current_streak: 0,
     best_streak: 0,
+    first_seen: null,
+    last_seen: null,
   };
 }
 
@@ -76,6 +110,8 @@ export function emptyChatMetrics(): ChatMetrics {
     answers_per_day: 0,
     average_accuracy: 0,
     average_response_time: 0,
+    rounds_count: 0,
+    average_round_participants: 0,
   };
 }
 
@@ -86,6 +122,9 @@ export function emptyQuestionMetrics(): QuestionMetrics {
     correct_rate: 0,
     average_response_time: 0,
     answer_distribution: {},
+    type: null,
+    category: null,
+    difficulty: null,
   };
 }
 
@@ -111,8 +150,8 @@ export interface RecordAnswerInput {
 }
 
 export interface MetricsStore {
-  recordQuestionPublished(chatId: string, questionId: string): Promise<void>;
-  recordQuestionCompleted(chatId: string, questionId: string): Promise<void>;
+  recordQuestionPublished(chatId: string, question: QuestionMeta): Promise<void>;
+  recordQuestionCompleted(chatId: string, questionId: string, participantCount: number): Promise<void>;
   recordAnswer(input: RecordAnswerInput): Promise<void>;
   snapshot(): Promise<MetricsSnapshot>;
 }

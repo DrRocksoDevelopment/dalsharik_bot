@@ -42,8 +42,9 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
 
     await this.deps.store.polls.update(poll.id, { status: 'completed' });
 
+    let totalVoterCount = 0;
     try {
-      await this.deps.sender.closePoll(poll.chatId, poll.messageId);
+      totalVoterCount = await this.deps.sender.closePoll(poll.chatId, poll.messageId);
     } catch (err) {
       this.deps.logger.error('Не удалось закрыть poll в Telegram', {
         pollId: poll.id,
@@ -124,6 +125,10 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       correct: results.correct,
     });
 
-    await this.deps.metrics?.recordQuestionCompleted(poll.chatId, poll.questionId);
+    await this.deps.metrics?.recordQuestionCompleted(
+      poll.chatId,
+      poll.questionId,
+      totalVoterCount > 0 ? totalVoterCount : results.totalPlayers,
+    );
   }
 }

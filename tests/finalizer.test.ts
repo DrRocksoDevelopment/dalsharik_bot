@@ -19,6 +19,7 @@ function makeSender() {
   const sender: FinalizerSender = {
     async closePoll() {
       calls.close += 1;
+      return 4;
     },
     async sendMessage(_chatId, text) {
       calls.messages += 1;

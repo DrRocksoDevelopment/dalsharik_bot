@@ -33,8 +33,12 @@ export function registerMetricsCommand(bot: Telegraf, deps: MetricsCommandsDeps)
           wrongAnswers: snapshot.game.wrong_answers,
           averageReactionMs: snapshot.game.average_reaction_time,
           medianReactionMs: snapshot.game.median_reaction_time,
+          medianCorrectReactionMs: snapshot.game.median_correct_reaction_time,
+          medianWrongReactionMs: snapshot.game.median_wrong_reaction_time,
           fastestCorrectMs: snapshot.game.fastest_correct_answer,
           slowestCorrectMs: snapshot.game.slowest_correct_answer,
+          averageRoundParticipants:
+            snapshot.game.rounds_count > 0 ? snapshot.game.average_round_participants : null,
           users: Object.keys(snapshot.users).length,
           chats: Object.keys(snapshot.chats).length,
           topChats,

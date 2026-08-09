@@ -26,6 +26,8 @@ const answerInput = {
   bestStreak: 2,
 };
 
+const questionMeta = (id: string) => ({ id, type: 'historical', category: 'space', difficulty: 3 });
+
 describe('metrics store', () => {
   it('пустой снапшот без данных', async () => {
     const { metrics } = await makeStore();
@@ -40,14 +42,19 @@ describe('metrics store', () => {
 
   it('recordQuestionPublished увеличивает счётчики публикаций', async () => {
     const { metrics } = await makeStore();
-    await metrics.recordQuestionPublished('-100123', 'event_000001');
-    await metrics.recordQuestionPublished('-100123', 'event_000002');
+    await metrics.recordQuestionPublished('-100123', questionMeta('event_000001'));
+    await metrics.recordQuestionPublished('-100123', questionMeta('event_000002'));
 
     const snap = await metrics.snapshot();
     expect(snap.game.questions_published).toBe(2);
     expect(snap.questions['event_000001']!.times_published).toBe(1);
     expect(snap.questions['event_000002']!.times_published).toBe(1);
+    expect(snap.questions['event_000001']!.type).toBe('historical');
+    expect(snap.questions['event_000001']!.category).toBe('space');
+    expect(snap.questions['event_000001']!.difficulty).toBe(3);
     expect(snap.chats['-100123']!.questions_per_day).toBeGreaterThan(0);
+    expect(Object.keys(snap.game.daily)).toHaveLength(1);
+    expect(snap.game.daily[Object.keys(snap.game.daily)[0]!]!.questions_published).toBe(2);
   });
 
   it('recordAnswer корректного ответа обновляет глобальные метрики', async () => {
@@ -63,6 +70,10 @@ describe('metrics store', () => {
     expect(snap.game.slowest_correct_answer).toBe(4000);
     expect(snap.game.average_reaction_time).toBe(6000);
     expect(snap.game.median_reaction_time).toBe(6000);
+    expect(snap.game.median_correct_reaction_time).toBe(4000);
+    expect(snap.game.median_wrong_reaction_time).toBe(8000);
+    const day = snap.game.daily[Object.keys(snap.game.daily)[0]!]!;
+    expect(day).toMatchObject({ answers: 2, correct: 1, wrong: 1 });
   });
 
   it('персистентность метрик в metrics.json', async () => {
@@ -88,6 +99,9 @@ describe('metrics store', () => {
     expect(u.score).toBe(6);
     expect(u.current_streak).toBe(0);
     expect(u.best_streak).toBe(3);
+    expect(u.first_seen).not.toBeNull();
+    expect(u.last_seen).not.toBeNull();
+    expect(u.first_seen).toBeLessThanOrEqual(u.last_seen!);
   });
 
   it('games_played считает уникальные вопросы', async () => {
@@ -112,10 +126,51 @@ describe('metrics store', () => {
     expect(snap.questions['event_000001']!.correct_rate).toBe(0.5);
   });
 
-  it('recordQuestionCompleted инкрементирует завершённые вопросы', async () => {
+  it('recordQuestionCompleted инкрементирует завершённые вопросы и явку', async () => {
     const { metrics } = await makeStore();
-    await metrics.recordQuestionCompleted('-100123', 'event_000001');
+    await metrics.recordQuestionCompleted('-100123', 'event_000001', 10);
+    await metrics.recordQuestionCompleted('-100123', 'event_000001', 5);
+
     const snap = await metrics.snapshot();
-    expect(snap.game.questions_completed).toBe(1);
+    expect(snap.game.questions_completed).toBe(2);
+    expect(snap.game.rounds_count).toBe(2);
+    expect(snap.game.average_round_participants).toBe(7.5);
+    expect(snap.chats['-100123']!.rounds_count).toBe(2);
+    expect(snap.chats['-100123']!.average_round_participants).toBe(7.5);
+    const day = snap.game.daily[Object.keys(snap.game.daily)[0]!]!;
+    expect(day.questions_completed).toBe(2);
+  });
+
+  it('legacy-снапшот без новых полей читается с нулями', async () => {
+    const { store, metrics } = await makeStore();
+    await store.store.metrics.mutate((items) => {
+      items.push({
+        id: 'global',
+        data: {
+          game: {
+            questions_published: 3,
+            questions_completed: 2,
+            total_answers: 5,
+            correct_answers: 3,
+            wrong_answers: 2,
+            reaction_time_sum: 25000,
+            fastest_correct_answer: 3000,
+            slowest_correct_answer: 8000,
+            recent_reaction_times: [3000, 4000, 5000, 6000, 8000],
+          },
+          users: { '1': { answers: 5, correct: 3, score: 10, current_streak: 1, best_streak: 4, question_ids: [] } },
+          chats: { '-100123': { questions_published: 3, answers: 5, correct: 3, reaction_time_sum: 25000, first_seen: Date.now(), players: ['1'] } },
+          questions: {},
+        },
+      });
+    });
+    const snap = await metrics.snapshot();
+    expect(snap.game.rounds_count).toBe(0);
+    expect(snap.game.average_round_participants).toBe(0);
+    expect(snap.game.median_correct_reaction_time).toBe(0);
+    expect(snap.game.daily).toEqual({});
+    expect(snap.users['1']!.first_seen).toBeNull();
+    expect(snap.users['1']!.last_seen).toBeNull();
+    expect(snap.chats['-100123']!.rounds_count).toBe(0);
   });
 });

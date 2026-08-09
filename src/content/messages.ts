@@ -57,8 +57,11 @@ export const MESSAGES = {
     wrongAnswers: number;
     averageReactionMs: number;
     medianReactionMs: number;
+    medianCorrectReactionMs: number;
+    medianWrongReactionMs: number;
     fastestCorrectMs: number | null;
     slowestCorrectMs: number | null;
+    averageRoundParticipants: number | null;
     users: number;
     chats: number;
     topChats: { chatId: string; answersPerDay: number }[];
@@ -73,7 +76,11 @@ export const MESSAGES = {
       `• Ответов: ${m.totalAnswers} (✅ ${m.correctAnswers} · ❌ ${m.wrongAnswers})`,
       `• Точность: ${accuracy.toFixed(1)}%`,
       `• Средняя скорость ответа: ${formatReactionTime(m.averageReactionMs)} · Медиана: ${formatReactionTime(m.medianReactionMs)}`,
+      `• Медиана верных: ${formatReactionTime(m.medianCorrectReactionMs)} · Медиана неверных: ${formatReactionTime(m.medianWrongReactionMs)}`,
       `• Самый быстрый верный: ${m.fastestCorrectMs === null ? '—' : formatReactionTime(m.fastestCorrectMs)} · Самый поздний: ${m.slowestCorrectMs === null ? '—' : formatReactionTime(m.slowestCorrectMs)}`,
+      m.averageRoundParticipants === null
+        ? ''
+        : `• Средняя явка за раунд: ${m.averageRoundParticipants.toFixed(1)} чел.`,
       '',
       `👥 Активных игроков: ${m.users}`,
       `💬 Чатов с игрой: ${m.chats}`,
@@ -83,7 +90,7 @@ export const MESSAGES = {
       lines.push('🏆 Топ чатов по активности:');
       lines.push(m.topChats.map((c) => `• ${c.chatId} — ${c.answersPerDay.toFixed(1)} ответов/день`).join('\n'));
     }
-    return lines.join('\n');
+    return lines.filter((l) => l !== '').join('\n');
   },
   pendingList: (questions: { id: string; event: { title: string }; category: string; difficulty: number }[]) =>
     `📋 Ожидают одобрения (${questions.length}):\n` +

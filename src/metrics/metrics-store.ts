@@ -9,6 +9,7 @@ import {
   type GameMetrics,
   type MetricsSnapshot,
   type MetricsStore,
+  type QuestionMeta,
   type QuestionMetrics,
   type RecordAnswerInput,
   type UserMetrics,
@@ -16,6 +17,14 @@ import {
 
 const GLOBAL_ID = 'global';
 const MEDIAN_BUFFER_SIZE = 500;
+
+interface StoredDayMetrics {
+  questions_published: number;
+  questions_completed: number;
+  answers: number;
+  correct: number;
+  wrong: number;
+}
 
 interface StoredGameMetrics {
   questions_published: number;
@@ -27,6 +36,11 @@ interface StoredGameMetrics {
   fastest_correct_answer: number | null;
   slowest_correct_answer: number | null;
   recent_reaction_times: number[];
+  recent_correct_times: number[];
+  recent_wrong_times: number[];
+  rounds_count: number;
+  rounds_participants_sum: number;
+  daily: Record<string, StoredDayMetrics>;
 }
 
 interface StoredUserMetrics {
@@ -36,6 +50,8 @@ interface StoredUserMetrics {
   current_streak: number;
   best_streak: number;
   question_ids: string[];
+  first_seen: number | null;
+  last_seen: number | null;
 }
 
 interface StoredChatMetrics {
@@ -45,6 +61,8 @@ interface StoredChatMetrics {
   reaction_time_sum: number;
   first_seen: number;
   players: string[];
+  rounds_count: number;
+  rounds_participants_sum: number;
 }
 
 interface StoredQuestionMetrics {
@@ -53,6 +71,9 @@ interface StoredQuestionMetrics {
   correct: number;
   reaction_time_sum: number;
   answer_distribution: Record<string, number>;
+  type: string | null;
+  category: string | null;
+  difficulty: number | null;
 }
 
 interface StoredSnapshot {
@@ -74,6 +95,11 @@ function emptyStoredSnapshot(): StoredSnapshot {
       fastest_correct_answer: null,
       slowest_correct_answer: null,
       recent_reaction_times: [],
+      recent_correct_times: [],
+      recent_wrong_times: [],
+      rounds_count: 0,
+      rounds_participants_sum: 0,
+      daily: {},
     },
     users: {},
     chats: {},
@@ -82,15 +108,41 @@ function emptyStoredSnapshot(): StoredSnapshot {
 }
 
 function emptyStoredUser(): StoredUserMetrics {
-  return { answers: 0, correct: 0, score: 0, current_streak: 0, best_streak: 0, question_ids: [] };
+  return { answers: 0, correct: 0, score: 0, current_streak: 0, best_streak: 0, question_ids: [], first_seen: null, last_seen: null };
 }
 
 function emptyStoredChat(now: number): StoredChatMetrics {
-  return { questions_published: 0, answers: 0, correct: 0, reaction_time_sum: 0, first_seen: now, players: [] };
+  return { questions_published: 0, answers: 0, correct: 0, reaction_time_sum: 0, first_seen: now, players: [], rounds_count: 0, rounds_participants_sum: 0 };
 }
 
 function emptyStoredQuestion(): StoredQuestionMetrics {
-  return { times_published: 0, times_answered: 0, correct: 0, reaction_time_sum: 0, answer_distribution: {} };
+  return { times_published: 0, times_answered: 0, correct: 0, reaction_time_sum: 0, answer_distribution: {}, type: null, category: null, difficulty: null };
+}
+
+function emptyStoredDay(): StoredDayMetrics {
+  return { questions_published: 0, questions_completed: 0, answers: 0, correct: 0, wrong: 0 };
+}
+
+function ensureDefaults(s: StoredSnapshot): void {
+  const g = s.game;
+  if (!g.daily) g.daily = {};
+  if (!g.recent_correct_times) g.recent_correct_times = [];
+  if (!g.recent_wrong_times) g.recent_wrong_times = [];
+  if (typeof g.rounds_count !== 'number') g.rounds_count = 0;
+  if (typeof g.rounds_participants_sum !== 'number') g.rounds_participants_sum = 0;
+  for (const u of Object.values(s.users)) {
+    if (typeof u.first_seen !== 'number') u.first_seen = null;
+    if (typeof u.last_seen !== 'number') u.last_seen = null;
+  }
+  for (const c of Object.values(s.chats)) {
+    if (typeof c.rounds_count !== 'number') c.rounds_count = 0;
+    if (typeof c.rounds_participants_sum !== 'number') c.rounds_participants_sum = 0;
+  }
+  for (const q of Object.values(s.questions)) {
+    if (typeof q.type !== 'string') q.type = null;
+    if (typeof q.category !== 'string') q.category = null;
+    if (typeof q.difficulty !== 'number') q.difficulty = null;
+  }
 }
 
 function median(values: number[]): number {
@@ -105,6 +157,10 @@ function daysSince(timestamp: number): number {
   return Math.max(1, days);
 }
 
+function dayKey(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
 function asStored(data: Record<string, unknown>): StoredSnapshot {
   return data as unknown as StoredSnapshot;
 }
@@ -117,9 +173,24 @@ function gameView(raw: StoredGameMetrics): GameMetrics {
   g.correct_answers = raw.correct_answers;
   g.wrong_answers = raw.wrong_answers;
   g.average_reaction_time = raw.total_answers > 0 ? raw.reaction_time_sum / raw.total_answers : 0;
-  g.median_reaction_time = median(raw.recent_reaction_times);
+  g.median_reaction_time = median(raw.recent_reaction_times ?? []);
+  g.median_correct_reaction_time = median(raw.recent_correct_times ?? []);
+  g.median_wrong_reaction_time = median(raw.recent_wrong_times ?? []);
   g.fastest_correct_answer = raw.fastest_correct_answer;
   g.slowest_correct_answer = raw.slowest_correct_answer;
+  g.rounds_count = raw.rounds_count ?? 0;
+  g.average_round_participants =
+    raw.rounds_count > 0 ? (raw.rounds_participants_sum ?? 0) / raw.rounds_count : 0;
+  g.daily = {};
+  for (const [day, m] of Object.entries(raw.daily ?? {})) {
+    g.daily[day] = {
+      questions_published: m.questions_published,
+      questions_completed: m.questions_completed,
+      answers: m.answers,
+      correct: m.correct,
+      wrong: m.wrong,
+    };
+  }
   return g;
 }
 
@@ -132,6 +203,8 @@ function userView(raw: StoredUserMetrics): UserMetrics {
   u.current_streak = raw.current_streak;
   u.best_streak = raw.best_streak;
   u.games_played = new Set(raw.question_ids).size;
+  u.first_seen = typeof raw.first_seen === 'number' ? raw.first_seen : null;
+  u.last_seen = typeof raw.last_seen === 'number' ? raw.last_seen : null;
   return u;
 }
 
@@ -142,6 +215,9 @@ function chatView(raw: StoredChatMetrics): ChatMetrics {
   c.answers_per_day = raw.answers / daysSince(raw.first_seen);
   c.average_accuracy = raw.answers > 0 ? raw.correct / raw.answers : 0;
   c.average_response_time = raw.answers > 0 ? raw.reaction_time_sum / raw.answers : 0;
+  c.rounds_count = raw.rounds_count ?? 0;
+  c.average_round_participants =
+    raw.rounds_count > 0 ? (raw.rounds_participants_sum ?? 0) / raw.rounds_count : 0;
   return c;
 }
 
@@ -152,6 +228,9 @@ function questionView(raw: StoredQuestionMetrics): QuestionMetrics {
   q.correct_rate = raw.times_answered > 0 ? raw.correct / raw.times_answered : 0;
   q.average_response_time = raw.times_answered > 0 ? raw.reaction_time_sum / raw.times_answered : 0;
   q.answer_distribution = { ...raw.answer_distribution };
+  q.type = typeof raw.type === 'string' ? raw.type : null;
+  q.category = typeof raw.category === 'string' ? raw.category : null;
+  q.difficulty = typeof raw.difficulty === 'number' ? raw.difficulty : null;
   return q;
 }
 
@@ -165,40 +244,69 @@ export class JsonMetricsStore implements MetricsStore {
         item = { id: GLOBAL_ID, data: emptyStoredSnapshot() } as MetricsRecord & { data: StoredSnapshot };
         items.push(item);
       }
+      ensureDefaults(item.data);
       fn(item.data);
     });
   }
 
-  async recordQuestionPublished(chatId: string, questionId: string): Promise<void> {
+  async recordQuestionPublished(chatId: string, question: QuestionMeta): Promise<void> {
     await this.mutate((s) => {
+      const now = Date.now();
       s.game.questions_published += 1;
-      const chat = (s.chats[chatId] ??= emptyStoredChat(Date.now()));
+      const day = (s.game.daily[dayKey(now)] ??= emptyStoredDay());
+      day.questions_published += 1;
+      const chat = (s.chats[chatId] ??= emptyStoredChat(now));
       chat.questions_published += 1;
-      const q = (s.questions[questionId] ??= emptyStoredQuestion());
+      const q = (s.questions[question.id] ??= emptyStoredQuestion());
       q.times_published += 1;
+      q.type = question.type;
+      q.category = question.category;
+      q.difficulty = question.difficulty;
     });
   }
 
-  async recordQuestionCompleted(_chatId: string, _questionId: string): Promise<void> {
+  async recordQuestionCompleted(chatId: string, _questionId: string, participantCount: number): Promise<void> {
     await this.mutate((s) => {
+      const now = Date.now();
       s.game.questions_completed += 1;
+      const day = (s.game.daily[dayKey(now)] ??= emptyStoredDay());
+      day.questions_completed += 1;
+      s.game.rounds_count += 1;
+      s.game.rounds_participants_sum += participantCount;
+
+      const chat = (s.chats[chatId] ??= emptyStoredChat(now));
+      chat.rounds_count += 1;
+      chat.rounds_participants_sum += participantCount;
     });
   }
 
   async recordAnswer(input: RecordAnswerInput): Promise<void> {
     const rt = input.reactionTimeMs;
     await this.mutate((s) => {
+      const now = Date.now();
       s.game.total_answers += 1;
+      const day = (s.game.daily[dayKey(now)] ??= emptyStoredDay());
+      day.answers += 1;
       if (input.isCorrect) {
         s.game.correct_answers += 1;
+        day.correct += 1;
         if (s.game.fastest_correct_answer === null || rt < s.game.fastest_correct_answer) {
           s.game.fastest_correct_answer = rt;
         }
         if (s.game.slowest_correct_answer === null || rt > s.game.slowest_correct_answer) {
           s.game.slowest_correct_answer = rt;
         }
+        s.game.recent_correct_times.push(rt);
+        if (s.game.recent_correct_times.length > MEDIAN_BUFFER_SIZE) {
+          s.game.recent_correct_times.splice(0, s.game.recent_correct_times.length - MEDIAN_BUFFER_SIZE);
+        }
       } else {
         s.game.wrong_answers += 1;
+        day.wrong += 1;
+        s.game.recent_wrong_times.push(rt);
+        if (s.game.recent_wrong_times.length > MEDIAN_BUFFER_SIZE) {
+          s.game.recent_wrong_times.splice(0, s.game.recent_wrong_times.length - MEDIAN_BUFFER_SIZE);
+        }
       }
       s.game.reaction_time_sum += rt;
       s.game.recent_reaction_times.push(rt);
@@ -213,6 +321,8 @@ export class JsonMetricsStore implements MetricsStore {
       user.current_streak = input.currentStreak;
       if (input.bestStreak > user.best_streak) user.best_streak = input.bestStreak;
       if (!user.question_ids.includes(input.questionId)) user.question_ids.push(input.questionId);
+      if (user.first_seen === null) user.first_seen = now;
+      user.last_seen = now;
 
       const chat = (s.chats[input.chatId] ??= emptyStoredChat(Date.now()));
       chat.answers += 1;

@@ -99,7 +99,12 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
       publishedAt: createdAt,
     });
 
-    await this.deps.metrics?.recordQuestionPublished(chat.chatId, question.id);
+    await this.deps.metrics?.recordQuestionPublished(chat.chatId, {
+      id: question.id,
+      type: question.type,
+      category: question.category,
+      difficulty: question.difficulty,
+    });
 
     this.deps.logger.info('Опубликован вопрос', {
       chatId: chat.chatId,
