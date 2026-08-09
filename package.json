@@ -16,7 +16,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "tsx scripts/seed.ts",
-    "validate-questions": "tsx scripts/validate-questions.ts"
+    "validate-questions": "tsx scripts/validate-questions.ts",
+    "release:patch": "npm version patch -m \"chore: релиз версии %s\"",
+    "release:minor": "npm version minor -m \"chore: релиз версии %s\"",
+    "release:major": "npm version major -m \"chore: релиз версии %s\"",
+    "release:push": "git push origin main --follow-tags"
   },
   "dependencies": {
     "telegraf": "^4.16.3",
