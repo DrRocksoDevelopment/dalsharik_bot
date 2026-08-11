@@ -54,8 +54,12 @@ describe('buildHostPrompt', () => {
     expect(prompt).toContain('Правильный ответ: C — вариант C');
     expect(prompt).toContain('Объяснение правильного ответа');
     expect(prompt).toContain('Распределение');
-    expect(prompt).toContain('Источники: https://example.com');
-    expect(prompt).toContain('Следующее событие: в 15:00');
+  });
+
+  it('не передаёт ведущему источники и следующее событие', () => {
+    const prompt = buildHostPrompt(makeContext());
+    expect(prompt).not.toContain('Источники:');
+    expect(prompt).not.toContain('Следующее событие');
   });
 
   it('включает топ и серии при наличии', () => {

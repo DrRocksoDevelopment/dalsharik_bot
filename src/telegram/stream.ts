@@ -1,7 +1,7 @@
 import type { Logger } from 'winston';
 import type { Telegram } from 'telegraf';
 
-const DEFAULT_PAUSE_MS = 2000;
+const DEFAULT_PAUSE_MS = 5000;
 
 export interface StreamSender {
   sendMessage(chatId: string, text: string): Promise<number>;

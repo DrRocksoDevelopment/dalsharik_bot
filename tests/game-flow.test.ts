@@ -121,6 +121,7 @@ describe('игровой цикл', () => {
       store: t.store,
       sender,
       host,
+      showCardDelayMs: 0,
     });
     await finalizer.finalize((await t.store.polls.get('poll-rec-1'))!);
 

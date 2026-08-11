@@ -16,6 +16,7 @@ import { getOrCreateChat } from '../bot/chat-utils.js';
 import type { HostContext, ShowHost, ShowMode } from './show/host.js';
 
 const STREAK_HIGHLIGHT_MIN = 2;
+const DEFAULT_SHOW_CARD_DELAY_MS = 2000;
 
 export interface QuestionFinalizerDeps {
   logger: Logger;
@@ -25,6 +26,7 @@ export interface QuestionFinalizerDeps {
   metrics?: MetricsStore;
   host?: ShowHost;
   now?: () => number;
+  showCardDelayMs?: number;
 }
 
 export interface QuestionFinalizer {
@@ -156,6 +158,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
     } else if (chat?.finalization === 'ai' && this.deps.host) {
       const mode: ShowMode = await this.deps.host.show(stored.chatId, hostCtx);
       if (mode === 'ai') {
+        await sleep(this.deps.showCardDelayMs ?? DEFAULT_SHOW_CARD_DELAY_MS);
         await this.publish(
           stored.chatId,
           buildShowSummaryMessage({ question, results, nextEventLocalTime }),
@@ -189,4 +192,8 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
 
     await this.deps.store.polls.update(stored.id, { status: 'completed' });
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
