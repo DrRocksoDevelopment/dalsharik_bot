@@ -374,6 +374,34 @@ describe('registerAiCommands', () => {
     expect(text).toContain('Валидных: 1');
   });
 
+  it('/generate отчёт показывает факт по счёту, когда usage.cost есть', async () => {
+    const client = stubClient();
+    vi.mocked(client.generate).mockResolvedValue({
+      rawText: validRawQuestions(),
+      usage: { ...USAGE, totalCostCredits: 0.00234 },
+    });
+    await setup({ createClient: () => client });
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+
+    await h.bot.handleUpdate(privateHelp('/generate 1'));
+
+    const text = lastReply(h);
+    expect(text).toContain('$0.0023 (факт по счёту OpenRouter)');
+    expect(text).not.toContain('(оценка по прайс-листу)');
+  });
+
+  it('/generate отчёт показывает оценку, когда usage.cost отсутствует', async () => {
+    const client = stubClient();
+    await setup({ createClient: () => client });
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+
+    await h.bot.handleUpdate(privateHelp('/generate 1'));
+
+    const text = lastReply(h);
+    expect(text).toContain('$0.0010 (оценка по прайс-листу)');
+    expect(text).not.toContain('(факт по счёту OpenRouter)');
+  });
+
   it('/generate передаёт клиенту ключ и модель', async () => {
     const client = stubClient();
     const createClient = vi.fn(() => client);

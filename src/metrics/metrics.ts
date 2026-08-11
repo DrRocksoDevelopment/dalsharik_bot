@@ -74,6 +74,7 @@ export interface AiUsageMetrics {
   estimated_cost_usd: number;
   inference_cost_usd: number;
   search_cost_usd: number;
+  total_cost_credits: number;
 }
 
 export interface AiMetrics {
@@ -158,6 +159,7 @@ export function emptyAiUsageMetrics(): AiUsageMetrics {
     estimated_cost_usd: 0,
     inference_cost_usd: 0,
     search_cost_usd: 0,
+    total_cost_credits: 0,
   };
 }
 
@@ -196,6 +198,7 @@ export interface RecordAiUsageInput {
   estimatedCostUsd: number;
   inferenceCostUsd: number;
   searchCostUsd: number;
+  totalCostCredits?: number;
 }
 
 export interface MetricsStore {
