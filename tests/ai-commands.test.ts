@@ -3,6 +3,7 @@ import { registerAiCommands, parseGenerateArgs } from '../src/bot/ai-commands.js
 import { OpenRouterError, type OpenRouterClient } from '../src/ai/openrouter-client.js';
 import type { GenerationUsage } from '../src/ai/types.js';
 import { AI_SETTINGS_ID } from '../src/ai/types.js';
+import { DEFAULT_HOST_PROMPT } from '../src/game/show/host.js';
 import { MESSAGES } from '../src/content/messages.js';
 import { InMemoryQuestionEngine } from '../src/game/question-engine.js';
 import { QuestionReloader } from '../src/game/question-reloader.js';
@@ -196,6 +197,30 @@ describe('registerAiCommands', () => {
     await h.bot.handleUpdate(privateHelp('/reset_host_prompt'));
     expect(lastReply(h)).toBe(MESSAGES.hostPromptReset);
     expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.hostPrompt).toBeUndefined();
+  });
+
+  it('/host_prompt без кастомного показывает стандартный', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/host_prompt'));
+    const text = lastReply(h);
+    expect(text).toContain('Кастомный промпт не задан');
+    expect(text).toContain(DEFAULT_HOST_PROMPT);
+  });
+
+  it('/host_prompt показывает кастомный промпт', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/set_host_prompt Будь дерзким'));
+    await h.bot.handleUpdate(privateHelp('/host_prompt'));
+    const text = lastReply(h);
+    expect(text).toContain('Текущий промпт ведущего');
+    expect(text).toContain('Будь дерзким');
+    expect(text).not.toContain('Кастомный промпт не задан');
+  });
+
+  it('/host_prompt отклоняет не-админа', async () => {
+    await setup();
+    await h.bot.handleUpdate(commandUpdate('/host_prompt', { fromId: 999, chatId: 999, chatType: 'private' }));
+    expect(lastReply(h)).toBe(MESSAGES.notAdmin);
   });
 
   it('/ai_status показывает состояние промпта ведущего', async () => {

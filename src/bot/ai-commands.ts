@@ -9,6 +9,7 @@ import { OpenRouterClient, OpenRouterError } from '../ai/openrouter-client.js';
 import { buildGenerationPrompt } from '../ai/generate-prompt.js';
 import { normalizeGenerated } from '../ai/normalize-generated.js';
 import { AI_SETTINGS_ID, type AiSettingsRecord } from '../ai/types.js';
+import { DEFAULT_HOST_PROMPT } from '../game/show/host.js';
 import {
   buildQuestionReviewKeyboard,
   buildQuestionReviewText,
@@ -138,6 +139,19 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
         hostPromptSet: settings?.hostPrompt !== undefined,
       }),
     );
+  });
+
+  bot.command('host_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const settings = await getSettings(deps.store);
+    await ctx.reply(MESSAGES.hostPromptShow(settings?.hostPrompt ?? null, DEFAULT_HOST_PROMPT));
   });
 
   bot.command('set_host_prompt', async (ctx) => {

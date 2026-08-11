@@ -45,7 +45,7 @@ export const MESSAGES = {
           '/metrics — метрики бота\n' +
           '/generate — генерация вопросов ИИ (OpenRouter)\n' +
           '/set_ai_key, /set_ai_model, /ai_status — настройка ИИ\n' +
-          '/set_host_prompt, /reset_host_prompt — инструкция ведущему (ЛС)',
+          '/set_host_prompt, /reset_host_prompt, /host_prompt — инструкция ведущему (ЛС)',
       );
     }
     return `📖 Команды *${botName}*:\n\n${sections.join('\n\n')}`;
@@ -230,6 +230,10 @@ export const MESSAGES = {
   hostPromptSet:
     '🎤 Кастомная инструкция ведущему сохранена.\nСброс к стандартной: /reset_host_prompt',
   hostPromptReset: '🎤 Кастомная инструкция ведущему сброшена — используется стандартная.',
+  hostPromptShow: (prompt: string | null, defaultPrompt: string) =>
+    prompt
+      ? `🎤 Текущий промпт ведущего:\n\n${prompt}\n\nСменить: /set_host_prompt <текст>\nСброс: /reset_host_prompt`
+      : `🎤 Кастомный промпт не задан — используется стандартный:\n\n${defaultPrompt}\n\nЗадать свой: /set_host_prompt <текст>`,
   hostPromptTooLong: (max: number) =>
     `❌ Инструкция слишком длинная (максимум ${max} символов).`,
   aiGenerateStarted: (count: number, category: string) =>
