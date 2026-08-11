@@ -7,6 +7,7 @@ import { makeLogger, makePoll, makeQuestion, makeTempStore, type TempStore } fro
 import type { AnswerRecord } from '../src/game/answer.js';
 import type { UserProfile } from '../src/game/user.js';
 import type { ChatRecord } from '../src/game/chat.js';
+import type { PollRecord } from '../src/game/poll.js';
 
 const tempStores: TempStore[] = [];
 
@@ -88,6 +89,43 @@ describe('finalizer', () => {
 
     const stored = await t.store.polls.get(poll.id);
     expect(stored?.status).toBe('completed');
+  });
+
+  it('использует свежую запись из хранилища при устаревшем объекте poll', async () => {
+    const t = await makeTempStore();
+    tempStores.push(t);
+    const question = makeQuestion();
+    const poll = makePoll();
+    await t.store.questions.insert(question);
+    await t.store.polls.insert(poll);
+    await t.store.answers.insert({
+      id: 'telegram-poll-1:1',
+      userId: '1',
+      chatId: '-100123',
+      questionId: 'event_000001',
+      telegramPollId: 'telegram-poll-1',
+      selectedOption: 'C',
+      isCorrect: true,
+      answeredAt: '2026-01-01T00:00:10.000Z',
+      reactionTimeMs: 10_000,
+      points: 3,
+      isRepeat: false,
+      updateId: 1,
+    });
+
+    const stale: PollRecord = { ...poll, telegramPollId: '', messageId: 0 };
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+    });
+
+    await finalizer.finalize(stale);
+
+    expect(calls.close).toBe(1);
+    expect(calls.lastText).toContain('Ответили: 1');
+    expect(calls.lastText).not.toContain('Никто не ответил');
   });
 
   it('не выводит NaN в превью для legacy-чата без таймзоны', async () => {

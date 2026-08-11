@@ -83,28 +83,28 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       return;
     }
 
-    await this.deps.store.polls.update(poll.id, { status: 'finalizing' });
+    await this.deps.store.polls.update(stored.id, { status: 'finalizing' });
 
     let totalVoterCount = 0;
     try {
-      totalVoterCount = await this.deps.sender.closePoll(poll.chatId, poll.messageId);
+      totalVoterCount = await this.deps.sender.closePoll(stored.chatId, stored.messageId);
     } catch (err) {
       this.deps.logger.error('Не удалось закрыть poll в Telegram', {
-        pollId: poll.id,
+        pollId: stored.id,
         error: err instanceof Error ? err.message : String(err),
       });
     }
 
-    const question = await this.deps.store.questions.get(poll.questionId);
+    const question = await this.deps.store.questions.get(stored.questionId);
     if (!question) {
       this.deps.logger.error('Вопрос не найден при завершении', {
-        pollId: poll.id,
-        questionId: poll.questionId,
+        pollId: stored.id,
+        questionId: stored.questionId,
       });
       return;
     }
 
-    const results = await scorePollAnswers(poll, question, {
+    const results = await scorePollAnswers(stored, question, {
       logger: this.deps.logger,
       store: this.deps.store,
       metrics: this.deps.metrics,
@@ -112,7 +112,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
     });
 
     const answers = await this.deps.store.answers.find(
-      (a) => a.telegramPollId === poll.telegramPollId,
+      (a) => a.telegramPollId === stored.telegramPollId,
     );
 
     const users = new Map<string, import('./user.js').UserProfile>();
@@ -124,13 +124,13 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       .sort((a, b) => b.currentStreak - a.currentStreak);
 
     let chatStreakRecord: number | null = null;
-    const chatAnswerers = await this.deps.store.answers.find((a) => a.chatId === poll.chatId);
+    const chatAnswerers = await this.deps.store.answers.find((a) => a.chatId === stored.chatId);
     for (const id of new Set(chatAnswerers.map((a) => a.userId))) {
       const best = users.get(id)?.bestStreak ?? 0;
       if (chatStreakRecord === null || best > chatStreakRecord) chatStreakRecord = best;
     }
 
-    const chat = await getOrCreateChat(this.deps.store, poll.chatId);
+    const chat = await getOrCreateChat(this.deps.store, stored.chatId);
     const now = (this.deps.now ?? Date.now)();
     const timezoneOffset =
       chat?.timezoneOffsetMinutes ?? DEFAULT_CONFIG.timezoneOffsetMinutes;
@@ -149,41 +149,44 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
     };
 
     if (results.totalPlayers === 0) {
-      await this.publish(poll.chatId, buildEmptyResultsMessage({ question, nextEventLocalTime }));
+      await this.publish(
+        stored.chatId,
+        buildEmptyResultsMessage({ question, nextEventLocalTime }),
+      );
     } else if (chat?.finalization === 'ai' && this.deps.host) {
-      const mode: ShowMode = await this.deps.host.show(poll.chatId, hostCtx);
+      const mode: ShowMode = await this.deps.host.show(stored.chatId, hostCtx);
       if (mode === 'ai') {
         await this.publish(
-          poll.chatId,
+          stored.chatId,
           buildShowSummaryMessage({ question, results, nextEventLocalTime }),
         );
       } else {
         await this.publish(
-          poll.chatId,
+          stored.chatId,
           this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime }),
         );
       }
     } else {
       await this.publish(
-        poll.chatId,
+        stored.chatId,
         this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime }),
       );
     }
 
     this.deps.logger.info('Вопрос завершён', {
-      pollId: poll.id,
-      chatId: poll.chatId,
-      questionId: poll.questionId,
+      pollId: stored.id,
+      chatId: stored.chatId,
+      questionId: stored.questionId,
       totalPlayers: results.totalPlayers,
       correct: results.correct,
     });
 
     await this.deps.metrics?.recordQuestionCompleted(
-      poll.chatId,
-      poll.questionId,
+      stored.chatId,
+      stored.questionId,
       totalVoterCount > 0 ? totalVoterCount : results.totalPlayers,
     );
 
-    await this.deps.store.polls.update(poll.id, { status: 'completed' });
+    await this.deps.store.polls.update(stored.id, { status: 'completed' });
   }
 }

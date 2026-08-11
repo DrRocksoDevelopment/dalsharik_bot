@@ -50,6 +50,12 @@ describe('publisher', () => {
 
     const stored = await t.store.polls.get(poll!.id);
     expect(stored?.telegramPollId).toBe('telegram-poll-1');
+    expect(stored?.messageId).toBe(100);
+    expect(stored?.status).toBe('active');
+
+    expect(poll!.telegramPollId).toBe('telegram-poll-1');
+    expect(poll!.messageId).toBe(100);
+    expect(poll!.status).toBe('active');
 
     const history = await t.store.questionHistory.find((h) => h.chatId === '-100123');
     expect(history).toHaveLength(1);

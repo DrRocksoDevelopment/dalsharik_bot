@@ -108,11 +108,17 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
       options: payload.options,
     });
 
+    poll.telegramPollId = sent.pollId;
+    poll.messageId = sent.messageId;
+    poll.status = 'active';
+
     await this.deps.store.polls.update(poll.id, {
       telegramPollId: sent.pollId,
       messageId: sent.messageId,
       status: 'active',
     });
+
+    const published = (await this.deps.store.polls.get(poll.id)) ?? poll;
 
     await this.deps.store.questionHistory.insert({
       id: `${chat.chatId}:${question.id}:${createdAt}`,
@@ -131,10 +137,10 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
     this.deps.logger.info('Опубликован вопрос', {
       chatId: chat.chatId,
       questionId: question.id,
-      pollId: poll.telegramPollId,
+      pollId: published.telegramPollId,
       expiresAt,
     });
 
-    return poll;
+    return published;
   }
 }
