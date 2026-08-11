@@ -5,10 +5,12 @@ import type { QuestionReloader } from '../game/question-reloader.js';
 import type { Category } from '../types/index.js';
 import { DEFAULT_CONFIG } from '../config/config.js';
 import { MESSAGES, categoryLabel } from '../content/messages.js';
-import { OpenRouterClient, OpenRouterError } from '../ai/openrouter-client.js';
-import { buildGenerationPrompt } from '../ai/generate-prompt.js';
+import { OpenRouterClient, OpenRouterError, getOrCreateClient } from '../ai/openrouter-client.js';
+import { buildGenerationPrompt, DEFAULT_GENERATION_PROMPT } from '../ai/generate-prompt.js';
 import { normalizeGenerated } from '../ai/normalize-generated.js';
 import { AI_SETTINGS_ID, type AiSettingsRecord } from '../ai/types.js';
+import { DEFAULT_HOST_PROMPT } from '../game/show/host.js';
+import type { MetricsStore } from '../metrics/metrics.js';
 import {
   buildQuestionReviewKeyboard,
   buildQuestionReviewText,
@@ -17,19 +19,18 @@ import {
 const DEFAULT_COUNT = 10;
 const MAX_COUNT = 25;
 const MAX_REVIEW_CARDS = 10;
+const MAX_HOST_PROMPT_LENGTH = 3000;
+const MAX_GENERATE_PROMPT_LENGTH = 3000;
 
 export interface AiCommandsDeps {
   logger: Logger;
   adminId: number | null;
   store: DataStore;
   reloader: QuestionReloader;
+  metrics?: MetricsStore;
   envApiKey?: string | null;
   envModel?: string | null;
   createClient?: (apiKey: string, model: string) => OpenRouterClient;
-}
-
-function defaultClient(apiKey: string, model: string): OpenRouterClient {
-  return new OpenRouterClient({ apiKey, model });
 }
 
 async function getSettings(store: DataStore): Promise<AiSettingsRecord | null> {
@@ -49,7 +50,11 @@ async function saveSettings(store: DataStore, patch: Partial<AiSettingsRecord>):
     });
     return;
   }
-  await store.aiSettings.update(AI_SETTINGS_ID, { ...patch, updatedAt: now });
+  await store.aiSettings.mutate((items) => {
+    const idx = items.findIndex((s) => s.id === AI_SETTINGS_ID);
+    if (idx === -1) return;
+    items[idx] = { ...items[idx]!, ...patch, id: AI_SETTINGS_ID, updatedAt: now };
+  });
 }
 
 function maskKey(key: string): string {
@@ -106,12 +111,45 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
     }
     const model = ctx.message.text.replace(/^\/\S+\s*/, '').trim();
     if (!model) {
-      await ctx.reply(MESSAGES.aiInvalidUsage('/set_ai_model openrouter/auto'));
+      await ctx.reply(MESSAGES.aiInvalidUsage('/set_ai_model <модель>'));
       return;
     }
     await saveSettings(deps.store, { model });
     deps.logger.info('Сохранена модель OpenRouter', { model });
     await ctx.reply(MESSAGES.aiModelSet(model));
+  });
+
+  bot.command('set_generate_model', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const model = ctx.message.text.replace(/^\/\S+\s*/, '').trim();
+    if (!model) {
+      await ctx.reply(MESSAGES.aiInvalidUsage('/set_generate_model <модель>'));
+      return;
+    }
+    await saveSettings(deps.store, { generateModel: model });
+    deps.logger.info('Сохранена модель генерации OpenRouter', { model });
+    await ctx.reply(MESSAGES.generateModelSet(model));
+  });
+
+  bot.command('reset_generate_model', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    await saveSettings(deps.store, { generateModel: undefined });
+    deps.logger.info('Сброшена модель генерации OpenRouter');
+    await ctx.reply(MESSAGES.generateModelReset);
   });
 
   bot.command('ai_status', async (ctx) => {
@@ -128,9 +166,113 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
     await ctx.reply(
       MESSAGES.aiStatus({
         model,
+        generateModel: settings?.generateModel ?? null,
         keyMasked: key ? maskKey(key) : null,
         keyFromEnv,
+        hostPromptSet: settings?.hostPrompt !== undefined,
       }),
+    );
+  });
+
+  bot.command('host_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const settings = await getSettings(deps.store);
+    await ctx.reply(MESSAGES.hostPromptShow(settings?.hostPrompt ?? null, DEFAULT_HOST_PROMPT));
+  });
+
+  bot.command('set_host_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const prompt = ctx.message.text.replace(/^\/\S+\s*/, '').trim();
+    if (!prompt) {
+      await ctx.reply(MESSAGES.aiInvalidUsage('/set_host_prompt <инструкция ведущему>'));
+      return;
+    }
+    if (prompt.length > MAX_HOST_PROMPT_LENGTH) {
+      await ctx.reply(MESSAGES.hostPromptTooLong(MAX_HOST_PROMPT_LENGTH));
+      return;
+    }
+    await saveSettings(deps.store, { hostPrompt: prompt });
+    deps.logger.info('Сохранён кастомный промпт ведущего');
+    await ctx.reply(MESSAGES.hostPromptSet);
+  });
+
+  bot.command('reset_host_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    await saveSettings(deps.store, { hostPrompt: undefined });
+    deps.logger.info('Сброшен кастомный промпт ведущего');
+    await ctx.reply(MESSAGES.hostPromptReset);
+  });
+
+  bot.command('set_generate_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const prompt = ctx.message.text.replace(/^\/\S+\s*/, '').trim();
+    if (!prompt) {
+      await ctx.reply(MESSAGES.aiInvalidUsage('/set_generate_prompt <инструкция генератору>'));
+      return;
+    }
+    if (prompt.length > MAX_GENERATE_PROMPT_LENGTH) {
+      await ctx.reply(MESSAGES.generatePromptTooLong(MAX_GENERATE_PROMPT_LENGTH));
+      return;
+    }
+    await saveSettings(deps.store, { generatePrompt: prompt });
+    deps.logger.info('Сохранён кастомный промпт генерации вопросов');
+    await ctx.reply(MESSAGES.generatePromptSet);
+  });
+
+  bot.command('reset_generate_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    await saveSettings(deps.store, { generatePrompt: undefined });
+    deps.logger.info('Сброшен кастомный промпт генерации вопросов');
+    await ctx.reply(MESSAGES.generatePromptReset);
+  });
+
+  bot.command('generate_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const settings = await getSettings(deps.store);
+    await ctx.reply(
+      MESSAGES.generatePromptShow(settings?.generatePrompt ?? null, DEFAULT_GENERATION_PROMPT),
     );
   });
 
@@ -154,7 +296,7 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
     }
     const settings = await getSettings(deps.store);
     const apiKey = settings?.apiKey ?? deps.envApiKey ?? null;
-    const model = settings?.model ?? deps.envModel ?? null;
+    const model = settings?.generateModel ?? settings?.model ?? deps.envModel ?? null;
     if (!apiKey) {
       await ctx.reply(MESSAGES.aiKeyMissing);
       return;
@@ -178,13 +320,17 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
       const existingIds = [...pool.map((q) => q.id), ...pending.map((q) => q.id)];
       const existingTexts = [...pool.map((q) => q.question), ...pending.map((q) => q.question)];
 
-      const client = (deps.createClient ?? defaultClient)(apiKey, model);
-      const prompt = buildGenerationPrompt({
-        count: parsed.count,
-        category: parsed.category,
-        existingTexts,
-      });
+      const client = (deps.createClient ?? getOrCreateClient)(apiKey, model);
+      const prompt = buildGenerationPrompt(
+        {
+          count: parsed.count,
+          category: parsed.category,
+          existingTexts,
+        },
+        settings?.generatePrompt ?? DEFAULT_GENERATION_PROMPT,
+      );
       const { rawText, usage } = await client.generate(prompt);
+      await deps.metrics?.recordAiUsage({ kind: 'generate', ...usage });
       const normalized = normalizeGenerated(rawText, { existingIds, existingTexts });
 
       if (!normalized.ok) {

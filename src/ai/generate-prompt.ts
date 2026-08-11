@@ -7,20 +7,7 @@ export interface BuildGenerationPromptOptions {
   existingTexts: string[];
 }
 
-export function buildGenerationPrompt(opts: BuildGenerationPromptOptions): string {
-  const categoryLine = opts.category
-    ? `Категория: ${categoryLabel(opts.category)} (${opts.category})`
-    : `Категории: смешай все — ${['history', 'science', 'technology', 'culture', 'geography']
-        .map(categoryLabel)
-        .join(', ')}`;
-  const blacklist =
-    opts.existingTexts.length > 0
-      ? `\nТексты вопросов, которые УЖЕ ЕСТЬ в пуле (не повторяй их, придумай другие):\n${opts.existingTexts
-          .map((t) => `- ${t}`)
-          .join('\n')}`
-      : '';
-
-  return `Ты — генератор вопросов для Telegram-викторины «Что было дальше?» (Dalsharik). Твоя задача — создать ${opts.count} новых вопросов.
+export const DEFAULT_GENERATION_PROMPT = `Ты — генератор вопросов для Telegram-викторины «Что было дальше?» (Dalsharik). Твоя задача — создавать новые вопросы по реальным событиям.
 
 ## Суть формата
 
@@ -32,8 +19,6 @@ export function buildGenerationPrompt(opts: BuildGenerationPromptOptions): strin
 
 Ключевое: правильный ответ должен быть ПРЯМЫМ ПРОДОЛЖЕНИЕМ события из контекста, а не пересказом уже известных фактов. Вопрос «когда/кто/где» — не в этом формате.
 
-${categoryLine}
-Количество вопросов: ${opts.count}.
 Сложность: преимущественно 2–3, редко 4 (по шкале 1–5). События и факты — только реальные и проверяемые, никакого вымысла.
 Дистракторы — правдоподобные, однозначно ложные, одинаковой длины и стиля с верным.
 
@@ -74,7 +59,7 @@ ${categoryLine}
 
 ## Формат ответа
 
-Верни ТОЛЬКО валидный JSON без markdown-обёрток, без комментариев и пояснений, в виде массива из ${opts.count} вопросов:
+Верни ТОЛЬКО валидный JSON без markdown-обёрток, без комментариев и пояснений, в виде массива вопросов:
 [
   { ...вопрос 1... },
   { ...вопрос 2... }
@@ -89,6 +74,27 @@ ${categoryLine}
 - вопрос не про «дальше», а про сам факт.
 - нереалистичный или абсурдный дистрактор.
 - одинаковые тексты вопросов внутри пачки.
-- факт, не подтверждённый поиском.
-${blacklist}`;
+- факт, не подтверждённый поиском.`;
+
+export function buildGenerationPrompt(
+  opts: BuildGenerationPromptOptions,
+  instruction: string = DEFAULT_GENERATION_PROMPT,
+): string {
+  const categoryLine = opts.category
+    ? `Категория: ${categoryLabel(opts.category)} (${opts.category})`
+    : `Категории: смешай все — ${['history', 'science', 'technology', 'culture', 'geography']
+        .map(categoryLabel)
+        .join(', ')}`;
+  const countLine = `Создай ${opts.count} новых вопросов.`;
+  const blacklist =
+    opts.existingTexts.length > 0
+      ? `\nТексты вопросов, которые УЖЕ ЕСТЬ в пуле (не повторяй их, придумай другие):\n${opts.existingTexts
+          .map((t) => `- ${t}`)
+          .join('\n')}`
+      : '';
+
+  return `${instruction}
+
+${categoryLine}
+${countLine}${blacklist}`;
 }

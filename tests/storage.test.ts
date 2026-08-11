@@ -59,15 +59,15 @@ describe('json storage', () => {
     await expect(storage.update('missing', { value: 1 })).rejects.toThrow(/не найден/);
   });
 
-  it('update отбрасывает неизвестные ключи патча', async () => {
+  it('update применяет новые ключи патча (эволюция схемы)', async () => {
     const t = await makeStorage();
     const storage = new JsonStorage<Item>(t.dir, 'items.json');
     await storage.insert({ id: 'a', value: 1 });
 
-    await storage.update('a', { value: 5, hacker: 'extra' } as never);
+    await storage.update('a', { value: 5, extra: 'new-field' } as never);
     const stored = await storage.get('a');
-    expect(stored).toEqual({ id: 'a', value: 5 });
-    expect((stored as unknown as Record<string, unknown>).hacker).toBeUndefined();
+    expect(stored?.value).toBe(5);
+    expect((stored as unknown as Record<string, unknown>).extra).toBe('new-field');
   });
 
   it('повреждённый JSON бросает CorruptedDataError', async () => {

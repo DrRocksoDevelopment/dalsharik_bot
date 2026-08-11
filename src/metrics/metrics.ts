@@ -63,11 +63,31 @@ export interface QuestionMeta {
   difficulty: number;
 }
 
+export type AiUsageKind = 'generate' | 'host';
+
+export interface AiUsageMetrics {
+  calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  web_search_requests: number;
+  estimated_cost_usd: number;
+  inference_cost_usd: number;
+  search_cost_usd: number;
+}
+
+export interface AiMetrics {
+  generate: AiUsageMetrics;
+  host: AiUsageMetrics;
+  total: AiUsageMetrics;
+}
+
 export interface MetricsSnapshot {
   game: GameMetrics;
   users: Record<string, UserMetrics>;
   chats: Record<string, ChatMetrics>;
   questions: Record<string, QuestionMetrics>;
+  ai: AiMetrics;
 }
 
 export function emptyGameMetrics(): GameMetrics {
@@ -128,12 +148,30 @@ export function emptyQuestionMetrics(): QuestionMetrics {
   };
 }
 
+export function emptyAiUsageMetrics(): AiUsageMetrics {
+  return {
+    calls: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    web_search_requests: 0,
+    estimated_cost_usd: 0,
+    inference_cost_usd: 0,
+    search_cost_usd: 0,
+  };
+}
+
 export function emptySnapshot(): MetricsSnapshot {
   return {
     game: emptyGameMetrics(),
     users: {},
     chats: {},
     questions: {},
+    ai: {
+      generate: emptyAiUsageMetrics(),
+      host: emptyAiUsageMetrics(),
+      total: emptyAiUsageMetrics(),
+    },
   };
 }
 
@@ -149,9 +187,21 @@ export interface RecordAnswerInput {
   bestStreak: number;
 }
 
+export interface RecordAiUsageInput {
+  kind: AiUsageKind;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  webSearchRequests: number;
+  estimatedCostUsd: number;
+  inferenceCostUsd: number;
+  searchCostUsd: number;
+}
+
 export interface MetricsStore {
   recordQuestionPublished(chatId: string, question: QuestionMeta): Promise<void>;
   recordQuestionCompleted(chatId: string, questionId: string, participantCount: number): Promise<void>;
   recordAnswer(input: RecordAnswerInput): Promise<void>;
+  recordAiUsage(input: RecordAiUsageInput): Promise<void>;
   snapshot(): Promise<MetricsSnapshot>;
 }

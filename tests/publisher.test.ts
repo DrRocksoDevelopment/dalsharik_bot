@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DefaultQuestionPublisher } from '../src/game/publisher.js';
 import { InMemoryQuestionEngine } from '../src/game/question-engine.js';
 import { defaultChatConfig } from '../src/types/index.js';
-import type { QuizSender, QuizPayload } from '../src/telegram/quiz-sender.js';
+import type { PollSender, PollPayload } from '../src/telegram/poll-sender.js';
 import { makeLogger, makeQuestion, makeTempStore, type TempStore } from './helpers.js';
 
 const tempStores: TempStore[] = [];
@@ -11,9 +11,9 @@ afterEach(async () => {
   for (const t of tempStores.splice(0)) await t.cleanup();
 });
 
-function makeSender(record: { lastPayload: QuizPayload | null }): QuizSender {
+function makeSender(record: { lastPayload: PollPayload | null }): PollSender {
   return {
-    async sendQuiz(payload) {
+    async sendPoll(payload) {
       record.lastPayload = payload;
       return { messageId: 100, pollId: 'telegram-poll-1' };
     },
@@ -26,7 +26,7 @@ describe('publisher', () => {
     tempStores.push(t);
     const question = makeQuestion();
     await t.store.questions.insert(question);
-    const recorded: { lastPayload: QuizPayload | null } = { lastPayload: null };
+    const recorded: { lastPayload: PollPayload | null } = { lastPayload: null };
     const publisher = new DefaultQuestionPublisher({
       logger: makeLogger(),
       store: t.store,
@@ -43,12 +43,19 @@ describe('publisher', () => {
     expect(new Set(poll!.optionMap)).toEqual(new Set(['A', 'B', 'C', 'D']));
 
     expect(recorded.lastPayload).not.toBeNull();
-    expect(recorded.lastPayload!.correctOptionId).toBeGreaterThanOrEqual(0);
-    const correctAt = recorded.lastPayload!.options[recorded.lastPayload!.correctOptionId];
-    expect(correctAt).toBe('вариант C');
+    expect(recorded.lastPayload!.options).toHaveLength(4);
+    expect(recorded.lastPayload!.text).toContain('Что произошло дальше?');
+    expect(recorded.lastPayload).not.toHaveProperty('correctOptionId');
+    expect(recorded.lastPayload).not.toHaveProperty('explanation');
 
     const stored = await t.store.polls.get(poll!.id);
     expect(stored?.telegramPollId).toBe('telegram-poll-1');
+    expect(stored?.messageId).toBe(100);
+    expect(stored?.status).toBe('active');
+
+    expect(poll!.telegramPollId).toBe('telegram-poll-1');
+    expect(poll!.messageId).toBe(100);
+    expect(poll!.status).toBe('active');
 
     const history = await t.store.questionHistory.find((h) => h.chatId === '-100123');
     expect(history).toHaveLength(1);

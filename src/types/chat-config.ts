@@ -28,6 +28,8 @@ export type Category =
   | 'culture'
   | 'geography';
 
+export type FinalizationMode = 'ai' | 'static';
+
 export interface ChatConfig {
   chatId: string;
   enabled: boolean;
@@ -38,6 +40,8 @@ export interface ChatConfig {
   difficultyMin: number;
   difficultyMax: number;
   timezoneOffsetMinutes: number;
+  finalization: FinalizationMode;
+  subscription: boolean;
 }
 
 export function defaultChatConfig(chatId: string): ChatConfig {
@@ -51,6 +55,8 @@ export function defaultChatConfig(chatId: string): ChatConfig {
     difficultyMin: DEFAULT_CONFIG.difficultyMin,
     difficultyMax: DEFAULT_CONFIG.difficultyMax,
     timezoneOffsetMinutes: DEFAULT_CONFIG.timezoneOffsetMinutes,
+    finalization: DEFAULT_CONFIG.finalization,
+    subscription: DEFAULT_CONFIG.subscription,
   };
 }
 
@@ -66,6 +72,8 @@ export function isValidChatConfig(cfg: unknown): cfg is ChatConfig {
     Array.isArray(c.categories) &&
     typeof c.difficultyMin === 'number' &&
     typeof c.difficultyMax === 'number' &&
-    (typeof c.timezoneOffsetMinutes === 'number' || c.timezoneOffsetMinutes === undefined)
+    (typeof c.timezoneOffsetMinutes === 'number' || c.timezoneOffsetMinutes === undefined) &&
+    (c.finalization === 'ai' || c.finalization === 'static' || c.finalization === undefined) &&
+    (typeof c.subscription === 'boolean' || c.subscription === undefined)
   );
 }

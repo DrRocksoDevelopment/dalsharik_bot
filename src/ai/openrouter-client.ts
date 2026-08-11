@@ -34,6 +34,13 @@ export interface OpenRouterClientDeps {
   logger?: Logger;
 }
 
+export interface GenerateOptions {
+  temperature?: number;
+  maxTokens?: number;
+  jsonObject?: boolean;
+  webSearch?: boolean;
+}
+
 function parsePricingValue(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -86,7 +93,7 @@ export class OpenRouterClient {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'X-OpenRouter-Title': 'Дальшарик',
+          'X-OpenRouter-Title': 'Dalsharik',
           ...init?.headers,
         },
       });
@@ -138,19 +145,28 @@ export class OpenRouterClient {
     return this.pricing;
   }
 
-  async generate(prompt: string): Promise<{ rawText: string; usage: GenerationUsage }> {
+  async generate(prompt: string, options?: GenerateOptions): Promise<{ rawText: string; usage: GenerationUsage }> {
+    const temperature = options?.temperature ?? 0.8;
+    const maxTokens = options?.maxTokens ?? this.maxTokens;
+    const jsonObject = options?.jsonObject ?? true;
+    const webSearch = options?.webSearch ?? true;
+
+    const body: Record<string, unknown> = {
+      model: this.model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature,
+      max_tokens: maxTokens,
+    };
+    if (jsonObject) body.response_format = { type: 'json_object' };
+    if (webSearch) {
+      body.tools = [{ type: 'openrouter:web_search', parameters: { max_results: 3 } }];
+      body.provider = { require_parameters: true };
+    }
+
     const [data, pricing] = await Promise.all([
       this.requestJson('/chat/completions', {
         method: 'POST',
-        body: JSON.stringify({
-          model: this.model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.8,
-          max_tokens: this.maxTokens,
-          response_format: { type: 'json_object' },
-          tools: [{ type: 'openrouter:web_search', parameters: { max_results: 3 } }],
-          provider: { require_parameters: true },
-        }),
+        body: JSON.stringify(body),
       }) as Promise<{
         choices?: { message?: ChatCompletionMessage }[];
         usage?: {
@@ -202,4 +218,16 @@ export class OpenRouterClient {
 
     return { rawText, usage };
   }
+}
+
+const clientCache = new Map<string, OpenRouterClient>();
+
+export function getOrCreateClient(apiKey: string, model: string): OpenRouterClient {
+  const key = `${apiKey} ${model}`;
+  let client = clientCache.get(key);
+  if (!client) {
+    client = new OpenRouterClient({ apiKey, model });
+    clientCache.set(key, client);
+  }
+  return client;
 }

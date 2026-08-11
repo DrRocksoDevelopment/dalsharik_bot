@@ -53,7 +53,7 @@ export function calculateResults(answers: AnswerRecord[]): QuestionResults {
 
   const byUser = new Map<string, number>();
   for (const a of answers) {
-    byUser.set(a.userId, (byUser.get(a.userId) ?? 0) + a.points);
+    byUser.set(a.userId, (byUser.get(a.userId) ?? 0) + (a.points ?? 0));
   }
   const topPlayers = [...byUser.entries()]
     .map(([userId, points]) => ({ userId, points }))

@@ -60,4 +60,18 @@ describe('chat-utils backfill', () => {
     const record = await getOrCreateChat(t.store, '-100123');
     expect(record?.questionTypes).toEqual(['technology_next_event']);
   });
+
+  it('дописывает finalization и subscription legacy-записи', async () => {
+    const t = await makeTempStore();
+    tempStores.push(t);
+    await t.store.chats.insert(legacyRecord());
+
+    const record = await getOrCreateChat(t.store, '-100123');
+    expect(record?.finalization).toBe('ai');
+    expect(record?.subscription).toBe(false);
+
+    const stored = await t.store.chats.get('-100123');
+    expect(stored?.finalization).toBe('ai');
+    expect(stored?.subscription).toBe(false);
+  });
 });

@@ -274,6 +274,8 @@ export class DefaultScheduler implements Scheduler {
         pollId: poll.id,
         error: err instanceof Error ? err.message : String(err),
       });
+      this.activePolls.delete(poll.chatId);
+      this.schedulePollClose(poll, this.retryDelayMs);
       return;
     }
 

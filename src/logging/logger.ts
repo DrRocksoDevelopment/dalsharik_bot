@@ -6,8 +6,14 @@ import { dirname } from 'node:path';
 
 const { combine, timestamp, printf, colorize, json } = winston.format;
 
-const consoleFormat = printf(({ level, message, timestamp }) => {
-  return `${timestamp} [${level}] ${message}`;
+export const consoleFormat = printf(({ level, message, timestamp, error, ...meta }) => {
+  const suffixParts: string[] = [];
+  if (error !== undefined) suffixParts.push(String(error));
+  for (const [key, value] of Object.entries(meta)) {
+    if (value !== undefined) suffixParts.push(`${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`);
+  }
+  const suffix = suffixParts.length > 0 ? ` — ${suffixParts.join(', ')}` : '';
+  return `${timestamp} [${level}] ${message}${suffix}`;
 });
 
 export type LoggerEnvConfig = Pick<EnvConfig, 'logLevel' | 'logFile' | 'logChatId'>;
@@ -35,7 +41,7 @@ export function initLogger(
   if (env.logChatId) {
     transports.push(
       new TelegramTransport({
-        bot: getBot(),
+        getBot,
         chatId: env.logChatId,
         level: 'error',
         format: winston.format.printf(({ message }) => String(message)),
