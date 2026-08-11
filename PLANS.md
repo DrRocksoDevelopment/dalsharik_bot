@@ -107,23 +107,28 @@
   3. `metrics.recordAnswer` (с финальным `isCorrect`) переносится сюда.
 - 0 участников → компактное раскрытие; 1+ → шоу/карточка.
 
-### 4. Стриминг текста (`src/telegram/stream.ts`)
-- Интерфейс `TextStreamer`: `stream(chatId, chunks: AsyncIterable<string>)`.
-- `EditTextStreamer` (основной, группы): `sendMessage` первой порцией → повторные
-  `editMessageText` с суффиксом «…», пауза ≥1 c, финальный flush; при ошибке edit — деградация
-  до обычного `sendMessage`.
-- `DraftTextStreamer` — опционально за флагом `STREAM_BACKEND`; DM-only, вне группового флоу.
-- telegraf 4.16.3 типизирует `editMessageText`; `callApi` нужен только для draft.
+### 4. Дополнение сообщения ведущего (`src/telegram/stream.ts`)
+- ИИ возвращает **готовый план шоу** — массив строк/абзацев; никакого потокового
+  посимвольного стрима. Драматические паузы расставляет бот между строками.
+- `TextStreamer.stream(chatId, chunks: readonly string[])`:
+  - первая строка уходит `sendMessage` (стартовое сообщение ведущего);
+  - каждая следующая — `editMessageText` с добавлением `\n` + строка и паузой
+    (~2 c) перед правкой;
+  - ошибка edit → деградация: остаток уходит отдельным `sendMessage`, стриминг прекращается;
+  - ошибка стартового `sendMessage` → пробрасывается наружу (хост падает на статичную карточку).
+- telegraf 4.16.3 типизирует `editMessageText`; минимальная правка — текст всегда
+  отличается от предыдущего (append), конфликта «message is not modified» нет.
 
 ### 5. AI-ведущий
-- `OpenRouterClient.streamGenerate(prompt): AsyncIterable<string>` — SSE (`stream: true`),
-  без `json_object`/web_search, `temperature ~0.9`, `max_tokens ~800`.
+- `OpenRouterClient.generate` (JSON) — ведущий возвращает план шоу в виде JSON-массива строк
+  (без `json_object`-инверсии и web_search; temperature ~0.9, max_tokens ~800).
 - `src/game/show/host.ts`:
   - `buildHostPrompt(ctx)` — вопрос + контекст + правильный ответ + объяснение + источники,
     распределение голосов, топ, серии, название чата, превью следующего события;
-    живой ведущий, русский, без markdown, ≤ ~250 слов.
+    живой ведущий, русский, без markdown, ≤ ~250 слов; план — драматические строки
+    (пример: «17 человек выбрали вариант Б...», «Жаль, что неправильно», ...).
   - `AiHost` — резолв ключа/модели (`aiSettings ?? env`) и `hostPrompt ?? default`;
-    стрим в `TextStreamer`; любая ошибка/таймаут/нет ключа → статичная карточка.
+    парсит план → `TextStreamer.stream`; любая ошибка/таймаут/нет ключа → статичная карточка.
 
 ### 6. Конфиг и команды
 - `ChatConfig.finalization: 'ai' | 'static'` (default `'ai'`), `ChatConfig.subscription: boolean`
