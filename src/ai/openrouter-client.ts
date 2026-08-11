@@ -93,7 +93,7 @@ export class OpenRouterClient {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'X-OpenRouter-Title': 'Дальшарик',
+          'X-OpenRouter-Title': 'Dalsharik',
           ...init?.headers,
         },
       });

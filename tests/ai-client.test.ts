@@ -56,6 +56,17 @@ describe('OpenRouterClient.generate', () => {
     expect(init.headers).toMatchObject({ Authorization: 'Bearer k' });
   });
 
+  it('заголовок X-OpenRouter-Title содержит только ASCII-символы', async () => {
+    const fetchMock = makeFetchMock();
+    const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
+    await client.generate('сгенерируй');
+    const url = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/chat/completions'));
+    const init = url![1] as RequestInit;
+    const title = (init.headers as Record<string, string>)['X-OpenRouter-Title'];
+    expect(title).toBe('Dalsharik');
+    expect([...title!].every((c) => c.charCodeAt(0) <= 255)).toBe(true);
+  });
+
   it('рассчитывает стоимость с учётом web-поиска', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
