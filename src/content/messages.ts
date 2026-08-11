@@ -46,7 +46,8 @@ export const MESSAGES = {
           '/generate — генерация вопросов ИИ (OpenRouter)\n' +
           '/set_ai_key, /set_ai_model, /ai_status — настройка ИИ\n' +
           '/set_host_prompt, /reset_host_prompt, /host_prompt — инструкция ведущему (ЛС)\n' +
-          '/set_generate_prompt, /reset_generate_prompt, /generate_prompt — промпт генерации (ЛС)',
+          '/set_generate_prompt, /reset_generate_prompt, /generate_prompt — промпт генерации (ЛС)\n' +
+          '/broadcast <текст> — рассылка во все чаты',
       );
     }
     return `📖 Команды *${botName}*:\n\n${sections.join('\n\n')}`;
@@ -300,6 +301,13 @@ export const MESSAGES = {
     `🎯 Любимая категория: ${s.favoriteCategory ? categoryLabel(s.favoriteCategory) : '—'}\n` +
     `🔥 Текущая серия: ${s.currentStreak} · Лучшая: ${s.bestStreak}\n` +
     `💎 Очков всего: ${s.score}`,
+  broadcastUsage: '📣 Использование: /broadcast <текст>',
+  broadcastEmpty: '📭 Нет включённых чатов для рассылки.',
+  broadcastDone: (sent: number, failed: number) => {
+    let text = `📣 Рассылка завершена: доставлено в ${sent} ${pluralRu(sent, ['чат', 'чата', 'чатов'])}.`;
+    if (failed > 0) text += ` Не удалось: ${failed}.`;
+    return text;
+  },
 } as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -334,6 +342,14 @@ export function formatReactionTime(ms: number): string {
   const min = Math.floor(sec / 60);
   const rest = Math.round(sec % 60);
   return `${min} мин ${rest} сек`;
+}
+
+export function pluralRu(n: number, forms: [string, string, string]): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return forms[1];
+  return forms[2];
 }
 
 export function escapeHtml(value: string): string {

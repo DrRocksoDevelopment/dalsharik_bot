@@ -26,6 +26,7 @@ import {
 import { registerImport } from './bot/import-commands.js';
 import { registerMetricsCommand } from './bot/metrics-commands.js';
 import { registerAiCommands } from './bot/ai-commands.js';
+import { registerBroadcastCommand } from './bot/broadcast-commands.js';
 
 export async function main(): Promise<void> {
   await fs.mkdir(env.dataDir, { recursive: true });
@@ -127,6 +128,12 @@ export async function main(): Promise<void> {
     reloader,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
+  });
+
+  registerBroadcastCommand(bot, {
+    logger,
+    adminId: env.botAdminId,
+    store,
   });
 
   scheduler = new DefaultScheduler({ logger, store, publisher, finalizer });
