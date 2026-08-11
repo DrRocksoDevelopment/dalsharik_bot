@@ -5,7 +5,7 @@ import type { QuestionReloader } from '../game/question-reloader.js';
 import type { Category } from '../types/index.js';
 import { DEFAULT_CONFIG } from '../config/config.js';
 import { MESSAGES, categoryLabel } from '../content/messages.js';
-import { OpenRouterClient, OpenRouterError } from '../ai/openrouter-client.js';
+import { OpenRouterClient, OpenRouterError, getOrCreateClient } from '../ai/openrouter-client.js';
 import { buildGenerationPrompt, DEFAULT_GENERATION_PROMPT } from '../ai/generate-prompt.js';
 import { normalizeGenerated } from '../ai/normalize-generated.js';
 import { AI_SETTINGS_ID, type AiSettingsRecord } from '../ai/types.js';
@@ -29,10 +29,6 @@ export interface AiCommandsDeps {
   envApiKey?: string | null;
   envModel?: string | null;
   createClient?: (apiKey: string, model: string) => OpenRouterClient;
-}
-
-function defaultClient(apiKey: string, model: string): OpenRouterClient {
-  return new OpenRouterClient({ apiKey, model });
 }
 
 async function getSettings(store: DataStore): Promise<AiSettingsRecord | null> {
@@ -288,7 +284,7 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
       const existingIds = [...pool.map((q) => q.id), ...pending.map((q) => q.id)];
       const existingTexts = [...pool.map((q) => q.question), ...pending.map((q) => q.question)];
 
-      const client = (deps.createClient ?? defaultClient)(apiKey, model);
+      const client = (deps.createClient ?? getOrCreateClient)(apiKey, model);
       const prompt = buildGenerationPrompt(
         {
           count: parsed.count,

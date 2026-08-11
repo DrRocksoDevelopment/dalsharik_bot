@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { OpenRouterClient, OpenRouterError } from '../src/ai/openrouter-client.js';
+import { OpenRouterClient, OpenRouterError, getOrCreateClient } from '../src/ai/openrouter-client.js';
 
 const PRICING_BODY = JSON.stringify({
   data: [
@@ -188,6 +188,39 @@ describe('OpenRouterClient.generate', () => {
     const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
     const { rawText } = await client.generate('x');
     expect(rawText).toBe('[{"a":1}]');
+  });
+});
+
+describe('getOrCreateClient', () => {
+  it('возвращает один инстанс на пару ключ+модель', () => {
+    const a = getOrCreateClient('k1', 'm1');
+    const b = getOrCreateClient('k1', 'm1');
+    const otherModel = getOrCreateClient('k1', 'm2');
+    const otherKey = getOrCreateClient('k2', 'm1');
+    expect(a).toBe(b);
+    expect(a).not.toBe(otherModel);
+    expect(a).not.toBe(otherKey);
+  });
+
+  it('переиспользованный клиент не дёргает /models повторно', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/models')) {
+        return new Response(PRICING_BODY, { status: 200 });
+      }
+      return new Response(completionBody('[{"ok":true}]'), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = getOrCreateClient('shared-key', 'shared/model');
+    const second = getOrCreateClient('shared-key', 'shared/model');
+    await first.generate('a');
+    await second.generate('b');
+
+    const modelsCalls = fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/models'));
+    expect(modelsCalls).toHaveLength(1);
+
+    vi.unstubAllGlobals();
   });
 });
 

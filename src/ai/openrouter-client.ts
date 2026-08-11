@@ -219,3 +219,15 @@ export class OpenRouterClient {
     return { rawText, usage };
   }
 }
+
+const clientCache = new Map<string, OpenRouterClient>();
+
+export function getOrCreateClient(apiKey: string, model: string): OpenRouterClient {
+  const key = `${apiKey} ${model}`;
+  let client = clientCache.get(key);
+  if (!client) {
+    client = new OpenRouterClient({ apiKey, model });
+    clientCache.set(key, client);
+  }
+  return client;
+}

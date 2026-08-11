@@ -1,7 +1,7 @@
 import type { Logger } from 'winston';
 import type { DataStore } from '../../storage/data-store.js';
 import type { TextStreamer } from '../../telegram/stream.js';
-import { OpenRouterClient } from '../../ai/openrouter-client.js';
+import { OpenRouterClient, getOrCreateClient } from '../../ai/openrouter-client.js';
 import { AI_SETTINGS_ID } from '../../ai/types.js';
 import type { Question } from '../question.js';
 import type { QuestionResults } from '../stats.js';
@@ -121,10 +121,6 @@ export interface AiHostDeps {
   createClient?: (apiKey: string, model: string) => OpenRouterClient;
 }
 
-function defaultClient(apiKey: string, model: string): OpenRouterClient {
-  return new OpenRouterClient({ apiKey, model });
-}
-
 export class AiHost implements ShowHost {
   private readonly hostInstruction: string;
 
@@ -142,7 +138,7 @@ export class AiHost implements ShowHost {
         return 'static';
       }
 
-      const client = (this.deps.createClient ?? defaultClient)(apiKey, model);
+      const client = (this.deps.createClient ?? getOrCreateClient)(apiKey, model);
       const instruction = settings?.hostPrompt ?? this.hostInstruction;
       const prompt = buildHostPrompt(ctx, instruction);
       const { rawText } = await client.generate(prompt, {
