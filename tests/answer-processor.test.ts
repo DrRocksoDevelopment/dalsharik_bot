@@ -26,36 +26,51 @@ async function setupStore(questionId = 'event_000001') {
 }
 
 describe('answer processor', () => {
-  it('правильный ответ начисляет очки и увеличивает серию', async () => {
+  it('фиксирует голос без скоринга: isCorrect/очки не проставляются', async () => {
     const t = await setupStore();
     await processPollAnswer(makePollAnswer(1, [2]), 1001, { logger: makeLogger(), store: t.store });
 
     const user = await t.store.users.get('1');
     expect(user).not.toBeNull();
-    expect(user!.currentStreak).toBe(1);
-    expect(user!.bestStreak).toBe(1);
-    expect(user!.score).toBe(3);
+    expect(user!.score).toBe(0);
+    expect(user!.currentStreak).toBe(0);
 
     const [answer] = await t.store.answers.find((a) => a.userId === '1');
-    expect(answer?.isCorrect).toBe(true);
-    expect(answer?.isRepeat).toBe(false);
     expect(answer?.selectedOption).toBe('C');
+    expect(answer?.isCorrect).toBeUndefined();
+    expect(answer?.points).toBeUndefined();
+    expect(answer?.scoredAt).toBeUndefined();
   });
 
-  it('повторный update не начисляет очки дважды', async () => {
+  it('последний голос побеждает: смена варианта перезаписывает запись', async () => {
     const t = await setupStore();
     const deps = { logger: makeLogger(), store: t.store };
     await processPollAnswer(makePollAnswer(1, [2]), 1001, deps);
-    await processPollAnswer(makePollAnswer(1, [2]), 1002, deps);
+    await processPollAnswer(makePollAnswer(1, [0]), 1002, deps);
 
     const answers = await t.store.answers.find((a) => a.userId === '1');
     expect(answers).toHaveLength(1);
-
-    const user = await t.store.users.get('1');
-    expect(user!.score).toBe(3);
+    expect(answers[0]!.selectedOption).toBe('A');
   });
 
-  it('повтор вопроса в другом чате даёт 0 очков и не меняет серию', async () => {
+  it('отзыв голоса (пустые option_ids) удаляет запись', async () => {
+    const t = await setupStore();
+    const deps = { logger: makeLogger(), store: t.store };
+    await processPollAnswer(makePollAnswer(1, [2]), 1001, deps);
+    await processPollAnswer(makePollAnswer(1, []), 1002, deps);
+
+    const answers = await t.store.answers.find((a) => a.userId === '1');
+    expect(answers).toHaveLength(0);
+  });
+
+  it('отзыв без сохранённого голоса не падает', async () => {
+    const t = await setupStore();
+    await processPollAnswer(makePollAnswer(1, []), 1001, { logger: makeLogger(), store: t.store });
+    const answers = await t.store.answers.find((a) => a.userId === '1');
+    expect(answers).toHaveLength(0);
+  });
+
+  it('повтор вопроса в другом poll помечает isRepeat', async () => {
     const t = await setupStore();
     const deps = { logger: makeLogger(), store: t.store };
     await processPollAnswer(makePollAnswer(1, [2]), 1001, deps);
@@ -72,32 +87,6 @@ describe('answer processor', () => {
       (a) => a.telegramPollId === 'telegram-poll-2',
     );
     expect(repeatAnswer?.isRepeat).toBe(true);
-    expect(repeatAnswer?.points).toBe(0);
-
-    const user = await t.store.users.get('1');
-    expect(user!.currentStreak).toBe(1);
-    expect(user!.score).toBe(3);
-  });
-
-  it('неправильный ответ сбрасывает серию', async () => {
-    const t = await setupStore();
-    const deps = { logger: makeLogger(), store: t.store };
-    await processPollAnswer(makePollAnswer(1, [2]), 1001, deps);
-    await t.store.polls.insert(makePoll({
-      id: 'poll-rec-2',
-      telegramPollId: 'telegram-poll-2',
-      chatId: '-100123',
-      questionId: 'event_000002',
-    }));
-    await t.store.questions.insert(makeQuestion({ id: 'event_000002' }));
-
-    await processPollAnswer(makePollAnswer(1, [0], 'telegram-poll-2'), 1002, deps);
-
-    const user = await t.store.users.get('1');
-    expect(user!.currentStreak).toBe(0);
-    expect(user!.bestStreak).toBe(1);
-    expect(user!.wrong).toBe(1);
-    expect(user!.score).toBe(3);
   });
 
   it('игнорирует ответ по закрытому poll', async () => {
@@ -114,6 +103,13 @@ describe('answer processor', () => {
     const t = await makeTempStore();
     tempStores.push(t);
     await processPollAnswer(makePollAnswer(1, [2]), 1001, { logger: makeLogger(), store: t.store });
+    const answers = await t.store.answers.find((a) => a.userId === '1');
+    expect(answers).toHaveLength(0);
+  });
+
+  it('игнорирует некорректный option_id', async () => {
+    const t = await setupStore();
+    await processPollAnswer(makePollAnswer(1, [99]), 1001, { logger: makeLogger(), store: t.store });
     const answers = await t.store.answers.find((a) => a.userId === '1');
     expect(answers).toHaveLength(0);
   });

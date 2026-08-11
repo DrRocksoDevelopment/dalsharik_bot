@@ -43,7 +43,7 @@ export async function main(): Promise<void> {
     store,
     adminId: env.botAdminId,
     pollAnswerHandler: (pollAnswer, updateId) =>
-      processPollAnswer(pollAnswer, updateId, { logger, store, metrics }),
+      processPollAnswer(pollAnswer, updateId, { logger, store }),
     onChatChanged: (chatId) => scheduler?.scheduleChat(chatId) ?? Promise.resolve(),
     ensureScheduled: (chatId) => scheduler?.ensureScheduled(chatId) ?? Promise.resolve(),
     nextPublishAt: (chatId) => scheduler?.getNextPublishAt(chatId) ?? Promise.resolve(null),
