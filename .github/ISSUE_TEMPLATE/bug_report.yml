@@ -1,0 +1,31 @@
+name: Баг-репорт
+description: Сообщение о дефекте
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидалось
+      description: Что должно было произойти.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Произошло
+      description: Что случилось на самом деле.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      placeholder: |
+        1. /generate ...
+        2. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи / окружение
+      description: Ошибки из логов, версия бота, дата, чат/суперадмин.
