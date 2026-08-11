@@ -66,7 +66,7 @@ describe('игровой цикл', () => {
     expect(byId.get('3')?.score).toBe(0);
   });
 
-  it('отсутствие ответов: итоги публикуются без ошибок', async () => {
+  it('отсутствие ответов: компактное раскрытие правильного ответа', async () => {
     const t = await setupGame();
     const { sender, calls } = makeSender();
     const finalizer = new DefaultQuestionFinalizer({ logger: makeLogger(), store: t.store, sender });
@@ -75,9 +75,11 @@ describe('игровой цикл', () => {
 
     expect(calls.close).toBe(1);
     expect(calls.messages).toBe(1);
-    expect(calls.lastText).toContain('Ответили: 0');
-    expect(calls.lastText).toContain('Точность: 0.0%');
+    expect(calls.lastText).toContain('🙊 Никто не ответил.');
+    expect(calls.lastText).toContain('✅ Правильный ответ: C — вариант C');
     expect(calls.lastText).toContain('📖 А на самом деле...');
+    expect(calls.lastText).toContain('Источники: https://example.com');
+    expect(calls.lastText).not.toContain('Точность:');
 
     const stored = await t.store.polls.get('poll-rec-1');
     expect(stored?.status).toBe('completed');

@@ -2,8 +2,8 @@ import type { Logger } from 'winston';
 import type { DataStore } from '../storage/data-store.js';
 import { DEFAULT_CONFIG } from '../config/config.js';
 import type { PollRecord } from './poll.js';
-import { calculateResults } from './stats.js';
-import { buildResultsMessage } from '../content/results.js';
+import { scorePollAnswers } from './score-poll.js';
+import { buildResultsMessage, buildEmptyResultsMessage } from '../content/results.js';
 import { SloganEngine, type SloganContext } from '../content/slogans.js';
 import type { FinalizerSender } from '../telegram/finalizer-sender.js';
 import type { MetricsStore } from '../metrics/metrics.js';
@@ -61,10 +61,16 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       return;
     }
 
+    const results = await scorePollAnswers(poll, question, {
+      logger: this.deps.logger,
+      store: this.deps.store,
+      metrics: this.deps.metrics,
+      now: this.deps.now,
+    });
+
     const answers = await this.deps.store.answers.find(
       (a) => a.telegramPollId === poll.telegramPollId,
     );
-    const results = calculateResults(answers);
 
     const users = new Map<string, import('./user.js').UserProfile>();
     for (const u of await this.deps.store.users.getAll()) users.set(u.id, u);
@@ -90,23 +96,24 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
         ? formatLocalTime(now + chat.questionInterval * 1000, timezoneOffset)
         : undefined;
 
-    const slogan = (this.deps.slogans ?? new SloganEngine()).get({
-      isCorrect: results.correct > 0,
-      playersCount: results.totalPlayers,
-      accuracy: results.accuracy,
-      fastestCorrectMs: results.fastestCorrectMs,
-      difficulty: question.difficulty,
-    } satisfies SloganContext);
-
-    const message = buildResultsMessage({
-      question,
-      results,
-      users,
-      slogan,
-      streakHighlights,
-      chatStreakRecord,
-      nextEventLocalTime,
-    });
+    const message =
+      results.totalPlayers === 0
+        ? buildEmptyResultsMessage({ question, nextEventLocalTime })
+        : buildResultsMessage({
+            question,
+            results,
+            users,
+            slogan: (this.deps.slogans ?? new SloganEngine()).get({
+              isCorrect: results.correct > 0,
+              playersCount: results.totalPlayers,
+              accuracy: results.accuracy,
+              fastestCorrectMs: results.fastestCorrectMs,
+              difficulty: question.difficulty,
+            } satisfies SloganContext),
+            streakHighlights,
+            chatStreakRecord,
+            nextEventLocalTime,
+          });
 
     try {
       await this.deps.sender.sendMessage(poll.chatId, message);

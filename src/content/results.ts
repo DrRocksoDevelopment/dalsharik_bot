@@ -24,6 +24,39 @@ export interface ResultsContext {
   nextEventLocalTime?: string;
 }
 
+export interface EmptyResultsContext {
+  question: Question;
+  nextEventLocalTime?: string;
+}
+
+export function buildEmptyResultsMessage(context: EmptyResultsContext): string {
+  const { question, nextEventLocalTime } = context;
+  const correct = question.answers.find((a) => a.id === question.correctAnswer);
+  const parts: string[] = [];
+
+  parts.push('🙊 Никто не ответил.');
+  parts.push('');
+  parts.push(
+    `✅ Правильный ответ: ${question.correctAnswer}${correct ? ` — ${correct.text}` : ''}`,
+  );
+  parts.push('');
+  parts.push('📖 А на самом деле...');
+  parts.push('');
+  parts.push(question.explanation);
+  parts.push('');
+
+  if (question.sources.length > 0) {
+    parts.push(`Источники: ${question.sources.join(', ')}`);
+  }
+
+  if (nextEventLocalTime) {
+    parts.push('');
+    parts.push(`⏭ Следующее событие — в ${nextEventLocalTime} по местному времени`);
+  }
+
+  return parts.join('\n');
+}
+
 function formatDistribution(results: QuestionResults, question: Question): string {
   const lines: string[] = [];
   for (const answer of question.answers) {
