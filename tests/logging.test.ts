@@ -26,7 +26,7 @@ describe('TelegramTransport', () => {
 
   it('отправляет сообщения уровня error', async () => {
     h = await makeBotHarness();
-    const transport = new TelegramTransport({ bot: h.bot, chatId: '-100123' });
+    const transport = new TelegramTransport({ getBot: () => h.bot, chatId: '-100123' });
 
     await log(transport, 'error', 'Что-то сломалось');
     await nextTick();
@@ -36,7 +36,7 @@ describe('TelegramTransport', () => {
 
   it('не отправляет сообщения ниже порога', async () => {
     h = await makeBotHarness();
-    const transport = new TelegramTransport({ bot: h.bot, chatId: '-100123', level: 'error' });
+    const transport = new TelegramTransport({ getBot: () => h.bot, chatId: '-100123', level: 'error' });
 
     await log(transport, 'debug', 'отладка');
     await nextTick();
@@ -47,7 +47,7 @@ describe('TelegramTransport', () => {
   it('обрезает сообщение до maxLength', async () => {
     h = await makeBotHarness();
     const transport = new TelegramTransport({
-      bot: h.bot,
+      getBot: () => h.bot,
       chatId: '-100123',
       level: 'error',
       maxLength: 50,
@@ -63,7 +63,7 @@ describe('TelegramTransport', () => {
 
   it('не урезает короткое сообщение', async () => {
     h = await makeBotHarness();
-    const transport = new TelegramTransport({ bot: h.bot, chatId: '-100123', maxLength: 50 });
+    const transport = new TelegramTransport({ getBot: () => h.bot, chatId: '-100123', maxLength: 50 });
 
     await log(transport, 'error', 'короткое');
     await nextTick();
@@ -73,7 +73,7 @@ describe('TelegramTransport', () => {
 
   it('ограничивает частоту отправки (10 за 10 сек)', async () => {
     h = await makeBotHarness();
-    const transport = new TelegramTransport({ bot: h.bot, chatId: '-100123' });
+    const transport = new TelegramTransport({ getBot: () => h.bot, chatId: '-100123' });
 
     for (let i = 0; i < 12; i += 1) {
       await log(transport, 'error', `ошибка ${i}`);
@@ -85,7 +85,7 @@ describe('TelegramTransport', () => {
 
   it('включает описание ошибки в сообщение', async () => {
     h = await makeBotHarness();
-    const transport = new TelegramTransport({ bot: h.bot, chatId: '-100123' });
+    const transport = new TelegramTransport({ getBot: () => h.bot, chatId: '-100123' });
 
     await new Promise<void>((resolve) => {
       transport.log({ level: 'error', message: 'Что-то сломалось', error: 'boom: timeout' }, () => resolve());

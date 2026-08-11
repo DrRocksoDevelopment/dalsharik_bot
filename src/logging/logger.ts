@@ -41,7 +41,7 @@ export function initLogger(
   if (env.logChatId) {
     transports.push(
       new TelegramTransport({
-        bot: getBot(),
+        getBot,
         chatId: env.logChatId,
         level: 'error',
         format: winston.format.printf(({ message }) => String(message)),
