@@ -111,6 +111,21 @@ describe('OpenRouterClient.generate', () => {
     expect(modelsCalls).toHaveLength(1);
   });
 
+  it('без web_search не шлёт tools/provider и применяет свои temperature/max_tokens', async () => {
+    const fetchMock = makeFetchMock();
+    const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
+    await client.generate('план шоу', { temperature: 0.9, maxTokens: 800, webSearch: false });
+
+    const url = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/chat/completions'));
+    const init = url![1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.temperature).toBe(0.9);
+    expect(body.max_tokens).toBe(800);
+    expect(body.tools).toBeUndefined();
+    expect(body.provider).toBeUndefined();
+    expect(body.response_format).toEqual({ type: 'json_object' });
+  });
+
   it('мапит 401 на «неверный ключ»', async () => {
     const fetchMock = vi.fn(async () => new Response('unauthorized', { status: 401 }));
     const client = new OpenRouterClient({ apiKey: 'bad', model: 'm', fetchFn: fetchMock as unknown as typeof fetch });
