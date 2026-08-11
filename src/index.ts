@@ -9,7 +9,7 @@ import { createDataStore } from './storage/data-store.js';
 import { initLogger } from './logging/logger.js';
 import { DefaultQuestionPublisher } from './game/publisher.js';
 import { InMemoryQuestionEngine } from './game/question-engine.js';
-import { TelegramQuizSender } from './telegram/quiz-sender.js';
+import { TelegramPollSender } from './telegram/poll-sender.js';
 import { TelegramFinalizerSender } from './telegram/finalizer-sender.js';
 import { DefaultQuestionFinalizer } from './game/finalizer.js';
 import { processPollAnswer } from './game/answer-processor.js';
@@ -55,7 +55,7 @@ export async function main(): Promise<void> {
     logger,
     store,
     engine,
-    sender: new TelegramQuizSender(bot.telegram),
+    sender: new TelegramPollSender(bot.telegram),
     metrics,
   });
 

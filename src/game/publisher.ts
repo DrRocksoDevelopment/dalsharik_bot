@@ -6,7 +6,7 @@ import type { ChatConfig } from '../types/index.js';
 import type { Question } from './question.js';
 import type { PollRecord } from './poll.js';
 import type { QuestionEngine } from './question-engine.js';
-import type { QuizSender } from '../telegram/quiz-sender.js';
+import type { PollSender } from '../telegram/poll-sender.js';
 import { shuffle } from '../utils/shuffle.js';
 import type { MetricsStore } from '../metrics/metrics.js';
 
@@ -14,7 +14,7 @@ export interface QuestionPublisherDeps {
   logger: Logger;
   store: DataStore;
   engine: QuestionEngine;
-  sender: QuizSender;
+  sender: PollSender;
   metrics?: MetricsStore;
   now?: () => number;
 }
@@ -23,11 +23,9 @@ const ROTATION_WINDOW = 20;
 
 export interface QuestionPublisher {
   publish(chat: ChatConfig): Promise<PollRecord | null>;
-  buildQuizPayload(question: Question): {
+  buildPollPayload(question: Question): {
     text: string;
     options: string[];
-    correctOptionId: number;
-    explanation: string;
     optionMap: string[];
   };
 }
@@ -35,17 +33,15 @@ export interface QuestionPublisher {
 export class DefaultQuestionPublisher implements QuestionPublisher {
   constructor(private readonly deps: QuestionPublisherDeps) {}
 
-  buildQuizPayload(question: Question) {
-    const correctIndex = question.answers.findIndex((a) => a.id === question.correctAnswer);
-    if (correctIndex === -1) {
-      throw new Error(`Вопрос ${question.id}: правильный ответ не найден в вариантах`);
+  buildPollPayload(question: Question) {
+    if (question.answers.length < 2) {
+      throw new Error(`Вопрос ${question.id}: нужно минимум 2 варианта`);
     }
     const order = shuffle(question.answers);
     const optionMap = order.map((a) => a.id);
     const options = order.map((a) => a.text);
-    const correctOptionId = order.findIndex((a) => a.id === question.correctAnswer);
     const text = `${question.event.title}\n\n${question.question}\n\n${formatDifficulty(question.difficulty)}`;
-    return { text, options, correctOptionId, explanation: question.explanation, optionMap };
+    return { text, options, optionMap };
   }
 
   async publish(chat: ChatConfig): Promise<PollRecord | null> {
@@ -87,7 +83,7 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
       return null;
     }
 
-    const payload = this.buildQuizPayload(question);
+    const payload = this.buildPollPayload(question);
     const now = (this.deps.now ?? Date.now)();
     const createdAt = new Date(now).toISOString();
     const expiresAt = new Date(now + chat.answerWindow * 1000).toISOString();
@@ -106,12 +102,10 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
 
     await this.deps.store.polls.insert(poll);
 
-    const sent = await this.deps.sender.sendQuiz({
+    const sent = await this.deps.sender.sendPoll({
       chatId: chat.chatId,
       text: payload.text,
       options: payload.options,
-      correctOptionId: payload.correctOptionId,
-      explanation: payload.explanation,
     });
 
     await this.deps.store.polls.update(poll.id, {

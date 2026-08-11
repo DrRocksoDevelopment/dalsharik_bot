@@ -47,7 +47,7 @@ describe('надёжность', () => {
     expect(answers).toHaveLength(2);
   });
 
-  it('poll сохраняется как sending до отправки в Telegram (sendQuiz падает)', async () => {
+  it('poll сохраняется как sending до отправки в Telegram (sendPoll падает)', async () => {
     const t = await makeTempStore();
     tempStores.push(t);
     const question = makeQuestion();
@@ -57,7 +57,7 @@ describe('надёжность', () => {
       store: t.store,
       engine: new InMemoryQuestionEngine([question]),
       sender: {
-        async sendQuiz() {
+        async sendPoll() {
           throw new Error('telegram down');
         },
       },
