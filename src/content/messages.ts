@@ -61,6 +61,8 @@ export const MESSAGES = {
   configUpdated: (field: string, value: string) =>
     `⚙️ Конфигурация обновлена: ${field} → ${value}`,
   invalidValue: (usage: string) => `❌ Неверный формат. Пример:\n${usage}`,
+  invalidSeconds: (usage: string, min: number) =>
+    `❌ Неверное значение: целое число секунд не меньше ${min}. Пример:\n${usage}`,
   onlyGroups: 'Этот бот работает в группах.',
   noConfig: 'Конфигурация для этой группы ещё не создана. Отправьте /start.',
   unknownQuestionType: (types: string) =>

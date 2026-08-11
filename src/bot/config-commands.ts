@@ -14,6 +14,12 @@ export interface ConfigCommandsDeps {
   onChatChanged?: (chatId: string) => Promise<void>;
 }
 
+const ADMIN_MIN_SECONDS = 60;
+
+function minSecondsFor(ctx: { from?: { id?: number } | null }, deps: ConfigCommandsDeps): number {
+  return ctx.from?.id === deps.adminId ? 1 : ADMIN_MIN_SECONDS;
+}
+
 export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps): void {
   bot.command('set_answer_window', async (ctx) => {
     const chatId = ctx.chat?.id.toString();
@@ -22,9 +28,10 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }
+    const minSeconds = minSecondsFor(ctx, deps);
     const value = Number(ctx.message.text.split(/\s+/)[1]);
-    if (!Number.isInteger(value) || value < 60) {
-      await ctx.reply(MESSAGES.invalidValue('/set_answer_window 3600'));
+    if (!Number.isInteger(value) || value < minSeconds) {
+      await ctx.reply(MESSAGES.invalidSeconds('/set_answer_window 3600', minSeconds));
       return;
     }
     await deps.store.chats.update(chatId, {
@@ -43,9 +50,10 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
       await ctx.reply(MESSAGES.notAdmin);
       return;
     }
+    const minSeconds = minSecondsFor(ctx, deps);
     const value = Number(ctx.message.text.split(/\s+/)[1]);
-    if (!Number.isInteger(value) || value < 60) {
-      await ctx.reply(MESSAGES.invalidValue('/set_interval 7200'));
+    if (!Number.isInteger(value) || value < minSeconds) {
+      await ctx.reply(MESSAGES.invalidSeconds('/set_interval 7200', minSeconds));
       return;
     }
     await deps.store.chats.update(chatId, {
