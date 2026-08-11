@@ -137,4 +137,32 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
     await deps.onChatChanged?.(chatId);
     await ctx.reply(MESSAGES.configUpdated('timezone', formatTimezoneOffset(offset)));
   });
+
+  bot.command('set_finalization', async (ctx) => {
+    const chatId = ctx.chat?.id.toString();
+    if (!chatId || !isGroupChat(ctx.chat?.type)) return;
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    const value = ctx.message.text.split(/\s+/)[1];
+    if (value !== 'ai' && value !== 'static') {
+      await ctx.reply(MESSAGES.invalidFinalization);
+      return;
+    }
+    const now = new Date().toISOString();
+    await deps.store.chats.mutate((chats) => {
+      const idx = chats.findIndex((c) => c.chatId === chatId);
+      if (idx === -1) return;
+      chats[idx] = { ...chats[idx]!, finalization: value, updatedAt: now };
+    });
+    deps.logger.info('Установлен режим финализации', { chatId, value });
+    await deps.onChatChanged?.(chatId);
+    await ctx.reply(
+      MESSAGES.configUpdated(
+        'finalization',
+        value === 'ai' ? 'AI-ведущий' : 'статичная карточка',
+      ),
+    );
+  });
 }

@@ -17,6 +17,7 @@ import {
 const DEFAULT_COUNT = 10;
 const MAX_COUNT = 25;
 const MAX_REVIEW_CARDS = 10;
+const MAX_HOST_PROMPT_LENGTH = 3000;
 
 export interface AiCommandsDeps {
   logger: Logger;
@@ -49,7 +50,11 @@ async function saveSettings(store: DataStore, patch: Partial<AiSettingsRecord>):
     });
     return;
   }
-  await store.aiSettings.update(AI_SETTINGS_ID, { ...patch, updatedAt: now });
+  await store.aiSettings.mutate((items) => {
+    const idx = items.findIndex((s) => s.id === AI_SETTINGS_ID);
+    if (idx === -1) return;
+    items[idx] = { ...items[idx]!, ...patch, id: AI_SETTINGS_ID, updatedAt: now };
+  });
 }
 
 function maskKey(key: string): string {
@@ -130,8 +135,46 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
         model,
         keyMasked: key ? maskKey(key) : null,
         keyFromEnv,
+        hostPromptSet: settings?.hostPrompt !== undefined,
       }),
     );
+  });
+
+  bot.command('set_host_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const prompt = ctx.message.text.replace(/^\/\S+\s*/, '').trim();
+    if (!prompt) {
+      await ctx.reply(MESSAGES.aiInvalidUsage('/set_host_prompt <инструкция ведущему>'));
+      return;
+    }
+    if (prompt.length > MAX_HOST_PROMPT_LENGTH) {
+      await ctx.reply(MESSAGES.hostPromptTooLong(MAX_HOST_PROMPT_LENGTH));
+      return;
+    }
+    await saveSettings(deps.store, { hostPrompt: prompt });
+    deps.logger.info('Сохранён кастомный промпт ведущего');
+    await ctx.reply(MESSAGES.hostPromptSet);
+  });
+
+  bot.command('reset_host_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    await saveSettings(deps.store, { hostPrompt: undefined });
+    deps.logger.info('Сброшен кастомный промпт ведущего');
+    await ctx.reply(MESSAGES.hostPromptReset);
   });
 
   let generating = false;

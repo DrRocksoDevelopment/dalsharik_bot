@@ -97,10 +97,37 @@ describe('config-commands', () => {
     expect(lastReply(h)).toBe(MESSAGES.invalidTimeZone);
   });
 
+  it('/set_finalization ai обновляет режим', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_finalization ai', { fromId: ADMIN_ID }));
+    expect((await h.store.chats.get('-100123'))?.finalization).toBe('ai');
+    expect(lastReply(h)).toContain('AI-ведущий');
+  });
+
+  it('/set_finalization static обновляет режим', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_finalization static', { fromId: ADMIN_ID }));
+    expect((await h.store.chats.get('-100123'))?.finalization).toBe('static');
+    expect(lastReply(h)).toContain('статичная карточка');
+  });
+
+  it('/set_finalization с неизвестным значением отклоняется', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_finalization bogus', { fromId: ADMIN_ID }));
+    expect(lastReply(h)).toBe(MESSAGES.invalidFinalization);
+    expect((await h.store.chats.get('-100123'))?.finalization).toBeUndefined();
+  });
+
   it('не-админ не может менять конфигурацию', async () => {
     h = await setup();
     await h.bot.handleUpdate(commandUpdate('/set_answer_window 3600', { fromId: 999 }));
     expect(lastReply(h)).toBe(MESSAGES.notAdmin);
     expect((await h.store.chats.get('-100123'))?.answerWindow).toBe(3600);
+  });
+
+  it('/set_finalization отклоняет не-админа', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_finalization static', { fromId: 999 }));
+    expect(lastReply(h)).toBe(MESSAGES.notAdmin);
   });
 });

@@ -29,6 +29,8 @@ export const DEFAULT_CONFIG = {
   difficultyMin: 1,
   difficultyMax: 5,
   timezoneOffsetMinutes: 180,
+  finalization: 'ai',
+  subscription: false,
 } as const;
 
 export const LEGACY_DEFAULT_QUESTION_TYPES = ['historical_next_event'] as const;

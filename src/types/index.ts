@@ -1,4 +1,9 @@
-export type { ChatConfig, Category, QuestionType } from './chat-config.js';
+export type {
+  ChatConfig,
+  Category,
+  QuestionType,
+  FinalizationMode,
+} from './chat-config.js';
 export {
   defaultChatConfig,
   isValidChatConfig,

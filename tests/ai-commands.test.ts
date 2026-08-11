@@ -153,6 +153,62 @@ describe('registerAiCommands', () => {
     expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.model).toBe('openrouter/auto');
   });
 
+  it('/set_host_prompt отклоняет не-админа', async () => {
+    await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_host_prompt Будь дерзким', { fromId: 999, chatId: 999, chatType: 'private' }));
+    expect(lastReply(h)).toBe(MESSAGES.notAdmin);
+    expect(await t.store.aiSettings.getAll()).toHaveLength(0);
+  });
+
+  it('/set_host_prompt работает только в ЛС', async () => {
+    await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_host_prompt Будь дерзким', { fromId: ADMIN_ID }));
+    expect(lastReply(h)).toBe(MESSAGES.aiPrivateOnly);
+  });
+
+  it('/set_host_prompt требует текст', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/set_host_prompt'));
+    expect(lastReply(h)).toContain('/set_host_prompt');
+  });
+
+  it('/set_host_prompt сохраняет инструкцию', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/set_host_prompt Будь дерзким и коротко подводи итоги'));
+    expect(lastReply(h)).toBe(MESSAGES.hostPromptSet);
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.hostPrompt).toBe(
+      'Будь дерзким и коротко подводи итоги',
+    );
+  });
+
+  it('/set_host_prompt дописывает поле на legacy-настройках', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_host_prompt Новый промпт'));
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.hostPrompt).toBe('Новый промпт');
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.apiKey).toBe('sk-or-secret-123456');
+  });
+
+  it('/reset_host_prompt удаляет инструкцию', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_host_prompt Временный промпт'));
+    await h.bot.handleUpdate(privateHelp('/reset_host_prompt'));
+    expect(lastReply(h)).toBe(MESSAGES.hostPromptReset);
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.hostPrompt).toBeUndefined();
+  });
+
+  it('/ai_status показывает состояние промпта ведущего', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/ai_status'));
+    expect(lastReply(h)).toContain('Промпт ведущего: стандартный');
+
+    await h.bot.handleUpdate(privateHelp('/set_host_prompt Особый'));
+    await h.bot.handleUpdate(privateHelp('/ai_status'));
+    expect(lastReply(h)).toContain('Промпт ведущего: кастомный');
+  });
+
   it('/ai_status без настроек показывает «не задан»', async () => {
     await setup();
     await h.bot.handleUpdate(privateHelp('/ai_status'));

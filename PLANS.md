@@ -139,12 +139,12 @@
   (суперадмин, ЛС), help.
 
 ### 7. Порядок работ
-1. `refactor:` sender/publisher → обычный poll + тесты.
-2. `refactor:` answer-processor → фиксация голосов (upsert/отзыв) + тесты.
-3. `feat:` скоринг на финализации (идемпотентно) + тесты.
-4. `feat:` stream.ts (edit-стриминг) + тесты.
-5. `feat:` AI-ведущий (SSE + фолбэк) + тесты.
-6. `feat:` `/set_finalization`, `/set_host_prompt`, `/reset_host_prompt`, help + тесты.
+1. `refactor:` sender/publisher → обычный poll + тесты. — готово (`0a4aa6c`)
+2. `refactor:` answer-processor → фиксация голосов (upsert/отзыв) + тесты. — готово (`cb5bae9`)
+3. `feat:` скоринг на финализации (идемпотентно) + тесты. — готово (`1e09d06`)
+4. `feat:` stream.ts (edit-стриминг) + тесты. — готово (`941d9d0`)
+5. `feat:` AI-ведущий (SSE + фолбэк) + тесты. — готово (`7ff2197`)
+6. `feat:` `/set_finalization`, `/set_host_prompt`, `/reset_host_prompt`, help + тесты. — готово
 7. `feat:` интеграция + game-flow тесты; CHANGELOG + релиз minor.
 
 ## Стратегия коммитов

@@ -31,7 +31,8 @@ export const MESSAGES = {
           '/set_interval <сек> — интервал между вопросами (мин 60)\n' +
           '/set_types <тип1,тип2> — типы вопросов\n' +
           '/set_difficulty <мин> <макс> — диапазон сложности 1–5\n' +
-          '/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)',
+          '/set_timezone ±Ч[:ММ] — часовой пояс группы (по умолчанию Москва +3)\n' +
+          '/set_finalization ai|static — итоги раунда: AI-ведущий или статичная карточка',
       );
     }
     if (role === 'super') {
@@ -43,7 +44,8 @@ export const MESSAGES = {
           '/config — конфигурация чата\n' +
           '/metrics — метрики бота\n' +
           '/generate — генерация вопросов ИИ (OpenRouter)\n' +
-          '/set_ai_key, /set_ai_model, /ai_status — настройка ИИ',
+          '/set_ai_key, /set_ai_model, /ai_status — настройка ИИ\n' +
+          '/set_host_prompt, /reset_host_prompt — инструкция ведущему (ЛС)',
       );
     }
     return `📖 Команды *${botName}*:\n\n${sections.join('\n\n')}`;
@@ -66,6 +68,8 @@ export const MESSAGES = {
   invalidDifficultyRange: '❌ Сложность должна быть от 1 до 5, мин ≤ макс.',
   invalidTimeZone:
     '❌ Неверный часовой пояс. Формат: /set_timezone ±Ч[:ММ], от −12 до +14. Примеры: +3, -5, +5:30.',
+  invalidFinalization:
+    '❌ Неверный режим финализации. Допустимые: ai, static. Пример: /set_finalization ai',
   notAdmin: '❌ Эта команда доступна только администраторам (группы или бота).',
   noPending: '📭 Ожидающих вопросов нет.',
   metricsError: '❌ Не удалось получить метрики.',
@@ -206,13 +210,26 @@ export const MESSAGES = {
   aiInvalidUsage: (usage: string) => `❌ Неверный формат. Пример:\n${usage}`,
   aiUnknownCategory: (usage: string) =>
     `❌ Неизвестная категория. Допустимые: history, science, technology, culture, geography. Пример:\n${usage}`,
-  aiStatus: (s: { model: string | null; keyMasked: string | null; keyFromEnv: boolean }) => {
+  aiStatus: (s: {
+    model: string | null;
+    keyMasked: string | null;
+    keyFromEnv: boolean;
+    hostPromptSet: boolean;
+  }) => {
     const keyLine = s.keyMasked
       ? `• Ключ: ${s.keyMasked}${s.keyFromEnv ? ' (из .env)' : ''}`
       : '• Ключ: не задан';
     const modelLine = s.model ? `• Модель: ${s.model}` : '• Модель: не задана';
-    return `🤖 ИИ-генерация вопросов (OpenRouter)\n${modelLine}\n${keyLine}\n\nСменить ключ: /set_ai_key <ключ>\nСменить модель: /set_ai_model <модель>\nСгенерировать: /generate [кол-во] [категория]`;
+    const hostPromptLine = s.hostPromptSet
+      ? '• Промпт ведущего: кастомный'
+      : '• Промпт ведущего: стандартный';
+    return `🤖 ИИ-генерация вопросов (OpenRouter)\n${modelLine}\n${keyLine}\n${hostPromptLine}\n\nСменить ключ: /set_ai_key <ключ>\nСменить модель: /set_ai_model <модель>\nПромпт ведущего: /set_host_prompt <текст>, сброс: /reset_host_prompt\nСгенерировать: /generate [кол-во] [категория]`;
   },
+  hostPromptSet:
+    '🎤 Кастомная инструкция ведущему сохранена.\nСброс к стандартной: /reset_host_prompt',
+  hostPromptReset: '🎤 Кастомная инструкция ведущему сброшена — используется стандартная.',
+  hostPromptTooLong: (max: number) =>
+    `❌ Инструкция слишком длинная (максимум ${max} символов).`,
   aiGenerateStarted: (count: number, category: string) =>
     `🤖 Генерирую ${count} вопросов${category}…\nПроверяю факты и источники через web-поиск.\nЭто может занять 30–120 секунд.`,
   aiGenerateError: (reason: string, usage: UsageSummary | null) => {
