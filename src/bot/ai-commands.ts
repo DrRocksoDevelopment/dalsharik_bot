@@ -10,6 +10,7 @@ import { buildGenerationPrompt, DEFAULT_GENERATION_PROMPT } from '../ai/generate
 import { normalizeGenerated } from '../ai/normalize-generated.js';
 import { AI_SETTINGS_ID, type AiSettingsRecord } from '../ai/types.js';
 import { DEFAULT_HOST_PROMPT } from '../game/show/host.js';
+import type { MetricsStore } from '../metrics/metrics.js';
 import {
   buildQuestionReviewKeyboard,
   buildQuestionReviewText,
@@ -26,6 +27,7 @@ export interface AiCommandsDeps {
   adminId: number | null;
   store: DataStore;
   reloader: QuestionReloader;
+  metrics?: MetricsStore;
   envApiKey?: string | null;
   envModel?: string | null;
   createClient?: (apiKey: string, model: string) => OpenRouterClient;
@@ -109,12 +111,45 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
     }
     const model = ctx.message.text.replace(/^\/\S+\s*/, '').trim();
     if (!model) {
-      await ctx.reply(MESSAGES.aiInvalidUsage('/set_ai_model openrouter/auto'));
+      await ctx.reply(MESSAGES.aiInvalidUsage('/set_ai_model <модель>'));
       return;
     }
     await saveSettings(deps.store, { model });
     deps.logger.info('Сохранена модель OpenRouter', { model });
     await ctx.reply(MESSAGES.aiModelSet(model));
+  });
+
+  bot.command('set_generate_model', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const model = ctx.message.text.replace(/^\/\S+\s*/, '').trim();
+    if (!model) {
+      await ctx.reply(MESSAGES.aiInvalidUsage('/set_generate_model <модель>'));
+      return;
+    }
+    await saveSettings(deps.store, { generateModel: model });
+    deps.logger.info('Сохранена модель генерации OpenRouter', { model });
+    await ctx.reply(MESSAGES.generateModelSet(model));
+  });
+
+  bot.command('reset_generate_model', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    await saveSettings(deps.store, { generateModel: undefined });
+    deps.logger.info('Сброшена модель генерации OpenRouter');
+    await ctx.reply(MESSAGES.generateModelReset);
   });
 
   bot.command('ai_status', async (ctx) => {
@@ -131,6 +166,7 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
     await ctx.reply(
       MESSAGES.aiStatus({
         model,
+        generateModel: settings?.generateModel ?? null,
         keyMasked: key ? maskKey(key) : null,
         keyFromEnv,
         hostPromptSet: settings?.hostPrompt !== undefined,
@@ -260,7 +296,7 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
     }
     const settings = await getSettings(deps.store);
     const apiKey = settings?.apiKey ?? deps.envApiKey ?? null;
-    const model = settings?.model ?? deps.envModel ?? null;
+    const model = settings?.generateModel ?? settings?.model ?? deps.envModel ?? null;
     if (!apiKey) {
       await ctx.reply(MESSAGES.aiKeyMissing);
       return;
@@ -294,6 +330,7 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
         settings?.generatePrompt ?? DEFAULT_GENERATION_PROMPT,
       );
       const { rawText, usage } = await client.generate(prompt);
+      await deps.metrics?.recordAiUsage({ kind: 'generate', ...usage });
       const normalized = normalizeGenerated(rawText, { existingIds, existingTexts });
 
       if (!normalized.ok) {

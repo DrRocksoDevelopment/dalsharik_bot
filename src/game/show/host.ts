@@ -3,6 +3,7 @@ import type { DataStore } from '../../storage/data-store.js';
 import type { TextStreamer } from '../../telegram/stream.js';
 import { OpenRouterClient, getOrCreateClient } from '../../ai/openrouter-client.js';
 import { AI_SETTINGS_ID } from '../../ai/types.js';
+import type { MetricsStore } from '../../metrics/metrics.js';
 import type { Question } from '../question.js';
 import type { QuestionResults } from '../stats.js';
 import type { UserProfile } from '../user.js';
@@ -119,6 +120,7 @@ export interface AiHostDeps {
   envModel?: string | null;
   hostInstruction?: string;
   createClient?: (apiKey: string, model: string) => OpenRouterClient;
+  metrics?: MetricsStore;
 }
 
 export class AiHost implements ShowHost {
@@ -141,11 +143,12 @@ export class AiHost implements ShowHost {
       const client = (this.deps.createClient ?? getOrCreateClient)(apiKey, model);
       const instruction = settings?.hostPrompt ?? this.hostInstruction;
       const prompt = buildHostPrompt(ctx, instruction);
-      const { rawText } = await client.generate(prompt, {
+      const { rawText, usage } = await client.generate(prompt, {
         temperature: 0.9,
         maxTokens: 800,
         webSearch: false,
       });
+      await this.deps.metrics?.recordAiUsage({ kind: 'host', ...usage });
 
       const plan = parseShowPlan(rawText);
       if (!plan.ok) {

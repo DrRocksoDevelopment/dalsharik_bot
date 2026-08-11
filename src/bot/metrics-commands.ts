@@ -42,6 +42,7 @@ export function registerMetricsCommand(bot: Telegraf, deps: MetricsCommandsDeps)
           users: Object.keys(snapshot.users).length,
           chats: Object.keys(snapshot.chats).length,
           topChats,
+          ai: snapshot.ai,
         }),
       );
     } catch (err) {

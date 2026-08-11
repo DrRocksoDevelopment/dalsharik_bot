@@ -1,16 +1,19 @@
 import type { DataStore, MetricsRecord } from '../storage/data-store.js';
 import {
+  emptyAiUsageMetrics,
   emptyChatMetrics,
   emptyGameMetrics,
   emptyQuestionMetrics,
   emptySnapshot,
   emptyUserMetrics,
+  type AiUsageMetrics,
   type ChatMetrics,
   type GameMetrics,
   type MetricsSnapshot,
   type MetricsStore,
   type QuestionMeta,
   type QuestionMetrics,
+  type RecordAiUsageInput,
   type RecordAnswerInput,
   type UserMetrics,
 } from './metrics.js';
@@ -80,11 +83,19 @@ interface StoredQuestionMetrics {
   difficulty: number | null;
 }
 
+type StoredAiUsageMetrics = Omit<AiUsageMetrics, never>;
+
+interface StoredAiMetrics {
+  generate: StoredAiUsageMetrics;
+  host: StoredAiUsageMetrics;
+}
+
 interface StoredSnapshot {
   game: StoredGameMetrics;
   users: Record<string, StoredUserMetrics>;
   chats: Record<string, StoredChatMetrics>;
   questions: Record<string, StoredQuestionMetrics>;
+  ai: StoredAiMetrics;
 }
 
 function emptyStoredSnapshot(): StoredSnapshot {
@@ -108,6 +119,10 @@ function emptyStoredSnapshot(): StoredSnapshot {
     users: {},
     chats: {},
     questions: {},
+    ai: {
+      generate: emptyAiUsageMetrics(),
+      host: emptyAiUsageMetrics(),
+    },
   };
 }
 
@@ -134,6 +149,9 @@ function ensureDefaults(s: StoredSnapshot): void {
   if (!g.recent_wrong_times) g.recent_wrong_times = [];
   if (typeof g.rounds_count !== 'number') g.rounds_count = 0;
   if (typeof g.rounds_participants_sum !== 'number') g.rounds_participants_sum = 0;
+  if (!s.ai) s.ai = { generate: emptyAiUsageMetrics(), host: emptyAiUsageMetrics() };
+  if (!s.ai.generate) s.ai.generate = emptyAiUsageMetrics();
+  if (!s.ai.host) s.ai.host = emptyAiUsageMetrics();
   for (const u of Object.values(s.users)) {
     if (typeof u.games_played !== 'number') {
       u.games_played = new Set(u.question_ids ?? []).size;
@@ -246,6 +264,19 @@ function questionView(raw: StoredQuestionMetrics): QuestionMetrics {
   q.category = typeof raw.category === 'string' ? raw.category : null;
   q.difficulty = typeof raw.difficulty === 'number' ? raw.difficulty : null;
   return q;
+}
+
+function aiUsageTotal(a: AiUsageMetrics, b: AiUsageMetrics): AiUsageMetrics {
+  return {
+    calls: a.calls + b.calls,
+    prompt_tokens: a.prompt_tokens + b.prompt_tokens,
+    completion_tokens: a.completion_tokens + b.completion_tokens,
+    total_tokens: a.total_tokens + b.total_tokens,
+    web_search_requests: a.web_search_requests + b.web_search_requests,
+    estimated_cost_usd: a.estimated_cost_usd + b.estimated_cost_usd,
+    inference_cost_usd: a.inference_cost_usd + b.inference_cost_usd,
+    search_cost_usd: a.search_cost_usd + b.search_cost_usd,
+  };
 }
 
 export class JsonMetricsStore implements MetricsStore {
@@ -363,6 +394,20 @@ export class JsonMetricsStore implements MetricsStore {
     });
   }
 
+  async recordAiUsage(input: RecordAiUsageInput): Promise<void> {
+    await this.mutate((s) => {
+      const bucket = input.kind === 'generate' ? s.ai.generate : s.ai.host;
+      bucket.calls += 1;
+      bucket.prompt_tokens += input.promptTokens;
+      bucket.completion_tokens += input.completionTokens;
+      bucket.total_tokens += input.totalTokens;
+      bucket.web_search_requests += input.webSearchRequests;
+      bucket.estimated_cost_usd += input.estimatedCostUsd;
+      bucket.inference_cost_usd += input.inferenceCostUsd;
+      bucket.search_cost_usd += input.searchCostUsd;
+    });
+  }
+
   async snapshot(): Promise<MetricsSnapshot> {
     const item = await this.store.metrics.get(GLOBAL_ID);
     const raw = item ? asStored(item.data) : emptyStoredSnapshot();
@@ -372,6 +417,9 @@ export class JsonMetricsStore implements MetricsStore {
     for (const [id, m] of Object.entries(raw.users)) snapshot.users[id] = userView(m);
     for (const [id, m] of Object.entries(raw.chats)) snapshot.chats[id] = chatView(m);
     for (const [id, m] of Object.entries(raw.questions)) snapshot.questions[id] = questionView(m);
+    snapshot.ai.generate = { ...raw.ai.generate };
+    snapshot.ai.host = { ...raw.ai.host };
+    snapshot.ai.total = aiUsageTotal(raw.ai.generate, raw.ai.host);
     return snapshot;
   }
 }

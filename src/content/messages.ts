@@ -1,3 +1,5 @@
+import type { AiMetrics } from '../metrics/metrics.js';
+
 export type HelpRole = 'user' | 'admin' | 'super';
 
 export const MESSAGES = {
@@ -45,6 +47,7 @@ export const MESSAGES = {
           '/metrics — метрики бота\n' +
           '/generate — генерация вопросов ИИ (OpenRouter)\n' +
           '/set_ai_key, /set_ai_model, /ai_status — настройка ИИ\n' +
+          '/set_generate_model, /reset_generate_model — отдельная модель для генерации (по умолчанию — общая)\n' +
           '/set_host_prompt, /reset_host_prompt, /host_prompt — инструкция ведущему (ЛС)\n' +
           '/set_generate_prompt, /reset_generate_prompt, /generate_prompt — промпт генерации (ЛС)\n' +
           '/broadcast <текст> — рассылка во все чаты',
@@ -93,6 +96,7 @@ export const MESSAGES = {
     users: number;
     chats: number;
     topChats: { chatId: string; answersPerDay: number }[];
+    ai: AiMetrics;
   }) => {
     const accuracy = m.totalAnswers > 0 ? (m.correctAnswers / m.totalAnswers) * 100 : 0;
     const lines = [
@@ -113,6 +117,23 @@ export const MESSAGES = {
       `👥 Активных игроков: ${m.users}`,
       `💬 Чатов с игрой: ${m.chats}`,
     ];
+    if (m.ai.total.calls > 0) {
+      lines.push('');
+      lines.push('🤖 AI-расход (оценка):');
+      if (m.ai.generate.calls > 0) {
+        lines.push(
+          `• Генерация вопросов: ${m.ai.generate.calls} выз. · $${m.ai.generate.estimated_cost_usd.toFixed(4)}` +
+            ` (токены ${m.ai.generate.total_tokens.toLocaleString('ru-RU')}, поиск ${m.ai.generate.web_search_requests})`,
+        );
+      }
+      if (m.ai.host.calls > 0) {
+        lines.push(
+          `• AI-ведущий: ${m.ai.host.calls} выз. · $${m.ai.host.estimated_cost_usd.toFixed(4)}` +
+            ` (токены ${m.ai.host.total_tokens.toLocaleString('ru-RU')})`,
+        );
+      }
+      lines.push(`• Итого: $${m.ai.total.estimated_cost_usd.toFixed(4)}`);
+    }
     if (m.topChats.length > 0) {
       lines.push('');
       lines.push('🏆 Топ чатов по активности:');
@@ -206,16 +227,17 @@ export const MESSAGES = {
   },
   aiPrivateOnly: 'ℹ️ Настройка ИИ и генерация вопросов работают только в личных сообщениях бота.',
   aiGenerateBusy: '⏳ Генерация уже идёт — дождись завершения.',
-  aiKeySet: '🔑 Ключ OpenRouter сохранён.\n\nТеперь задай модель: /set_ai_model <модель>\nНапример: /set_ai_model openrouter/auto\nПроверка настроек: /ai_status',
+  aiKeySet: '🔑 Ключ OpenRouter сохранён.\n\nТеперь задай модель: /set_ai_model <модель>\nПроверка настроек: /ai_status',
   aiModelSet: (model: string) => `🤖 Модель сохранена: ${model}`,
   aiKeyMissing: '🔑 Ключ OpenRouter не задан. Отправь: /set_ai_key <ключ> (только в ЛС)',
   aiModelMissing:
-    '🤖 Модель не задана. Отправь: /set_ai_model <модель>\nНапример: /set_ai_model openrouter/auto или /set_ai_model google/gemini-2.0-flash-001',
+    '🤖 Модель не задана. Отправь: /set_ai_model <модель>\nМодель используется и для генерации, и для финализации. Отдельная модель для генерации: /set_generate_model <модель>',
   aiInvalidUsage: (usage: string) => `❌ Неверный формат. Пример:\n${usage}`,
   aiUnknownCategory: (usage: string) =>
     `❌ Неизвестная категория. Допустимые: history, science, technology, culture, geography. Пример:\n${usage}`,
   aiStatus: (s: {
     model: string | null;
+    generateModel: string | null;
     keyMasked: string | null;
     keyFromEnv: boolean;
     hostPromptSet: boolean;
@@ -224,11 +246,17 @@ export const MESSAGES = {
       ? `• Ключ: ${s.keyMasked}${s.keyFromEnv ? ' (из .env)' : ''}`
       : '• Ключ: не задан';
     const modelLine = s.model ? `• Модель: ${s.model}` : '• Модель: не задана';
+    const generateModelLine = s.generateModel
+      ? `• Модель генерации: ${s.generateModel}`
+      : '• Модель генерации: как основная';
     const hostPromptLine = s.hostPromptSet
       ? '• Промпт ведущего: кастомный'
       : '• Промпт ведущего: стандартный';
-    return `🤖 ИИ-генерация вопросов (OpenRouter)\n${modelLine}\n${keyLine}\n${hostPromptLine}\n\nСменить ключ: /set_ai_key <ключ>\nСменить модель: /set_ai_model <модель>\nПромпт ведущего: /set_host_prompt <текст>, сброс: /reset_host_prompt\nСгенерировать: /generate [кол-во] [категория]`;
+    return `🤖 ИИ-генерация вопросов (OpenRouter)\n${modelLine}\n${generateModelLine}\n${keyLine}\n${hostPromptLine}\n\nСменить ключ: /set_ai_key <ключ>\nСменить модель: /set_ai_model <модель>\nМодель генерации: /set_generate_model <модель>, сброс: /reset_generate_model\nПромпт ведущего: /set_host_prompt <текст>, сброс: /reset_host_prompt\nСгенерировать: /generate [кол-во] [категория]`;
   },
+  generateModelSet: (model: string) =>
+    `🤖 Модель генерации сохранена: ${model}\nСброс к основной модели: /reset_generate_model`,
+  generateModelReset: '🤖 Модель генерации сброшена — используется основная (/set_ai_model).',
   hostPromptSet:
     '🎤 Кастомная инструкция ведущему сохранена.\nСброс к стандартной: /reset_host_prompt',
   hostPromptReset: '🎤 Кастомная инструкция ведущему сброшена — используется стандартная.',

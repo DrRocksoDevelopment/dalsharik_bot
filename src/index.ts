@@ -72,6 +72,7 @@ export async function main(): Promise<void> {
     streamer,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
+    metrics,
   });
 
   const finalizer = new DefaultQuestionFinalizer({
@@ -126,6 +127,7 @@ export async function main(): Promise<void> {
     adminId: env.botAdminId,
     store,
     reloader,
+    metrics,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
   });
