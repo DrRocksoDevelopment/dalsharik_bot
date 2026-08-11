@@ -4,6 +4,7 @@ import { OpenRouterError, type OpenRouterClient } from '../src/ai/openrouter-cli
 import type { GenerationUsage } from '../src/ai/types.js';
 import { AI_SETTINGS_ID } from '../src/ai/types.js';
 import { DEFAULT_HOST_PROMPT } from '../src/game/show/host.js';
+import { DEFAULT_GENERATION_PROMPT } from '../src/ai/generate-prompt.js';
 import { MESSAGES } from '../src/content/messages.js';
 import { InMemoryQuestionEngine } from '../src/game/question-engine.js';
 import { QuestionReloader } from '../src/game/question-reloader.js';
@@ -221,6 +222,73 @@ describe('registerAiCommands', () => {
     await setup();
     await h.bot.handleUpdate(commandUpdate('/host_prompt', { fromId: 999, chatId: 999, chatType: 'private' }));
     expect(lastReply(h)).toBe(MESSAGES.notAdmin);
+  });
+
+  it('/set_generate_prompt сохраняет инструкцию', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/set_generate_prompt Делай вопросы только про космос'));
+    expect(lastReply(h)).toBe(MESSAGES.generatePromptSet);
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.generatePrompt).toBe(
+      'Делай вопросы только про космос',
+    );
+  });
+
+  it('/set_generate_prompt требует текст', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/set_generate_prompt'));
+    expect(lastReply(h)).toContain('/set_generate_prompt');
+  });
+
+  it('/reset_generate_prompt удаляет инструкцию', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_generate_prompt Временный промпт'));
+    await h.bot.handleUpdate(privateHelp('/reset_generate_prompt'));
+    expect(lastReply(h)).toBe(MESSAGES.generatePromptReset);
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.generatePrompt).toBeUndefined();
+  });
+
+  it('/generate_prompt без кастомного показывает стандартный', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/generate_prompt'));
+    const text = lastReply(h);
+    expect(text).toContain('Кастомный промпт не задан');
+    expect(text).toContain(DEFAULT_GENERATION_PROMPT);
+  });
+
+  it('/generate_prompt показывает кастомный промпт', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/set_generate_prompt Про космос'));
+    await h.bot.handleUpdate(privateHelp('/generate_prompt'));
+    const text = lastReply(h);
+    expect(text).toContain('Текущий промпт генерации');
+    expect(text).toContain('Про космос');
+    expect(text).not.toContain('Кастомный промпт не задан');
+  });
+
+  it('/generate использует кастомный промпт генерации', async () => {
+    const client = stubClient();
+    await setup({ createClient: () => client });
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_generate_prompt Вопросы только про море'));
+
+    await h.bot.handleUpdate(privateHelp('/generate 1 history'));
+
+    const prompt = vi.mocked(client.generate).mock.calls[0]![0];
+    expect(prompt).toContain('Вопросы только про море');
+    expect(prompt).toContain('1 новых вопросов');
+    expect(prompt).not.toContain(DEFAULT_GENERATION_PROMPT);
+  });
+
+  it('/generate без кастомного использует стандартный промпт', async () => {
+    const client = stubClient();
+    await setup({ createClient: () => client });
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+
+    await h.bot.handleUpdate(privateHelp('/generate 1 history'));
+
+    const prompt = vi.mocked(client.generate).mock.calls[0]![0];
+    expect(prompt).toContain('Ты — генератор вопросов для Telegram-викторины');
   });
 
   it('/ai_status показывает состояние промпта ведущего', async () => {

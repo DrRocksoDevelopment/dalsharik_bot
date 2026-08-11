@@ -6,7 +6,7 @@ import type { Category } from '../types/index.js';
 import { DEFAULT_CONFIG } from '../config/config.js';
 import { MESSAGES, categoryLabel } from '../content/messages.js';
 import { OpenRouterClient, OpenRouterError } from '../ai/openrouter-client.js';
-import { buildGenerationPrompt } from '../ai/generate-prompt.js';
+import { buildGenerationPrompt, DEFAULT_GENERATION_PROMPT } from '../ai/generate-prompt.js';
 import { normalizeGenerated } from '../ai/normalize-generated.js';
 import { AI_SETTINGS_ID, type AiSettingsRecord } from '../ai/types.js';
 import { DEFAULT_HOST_PROMPT } from '../game/show/host.js';
@@ -19,6 +19,7 @@ const DEFAULT_COUNT = 10;
 const MAX_COUNT = 25;
 const MAX_REVIEW_CARDS = 10;
 const MAX_HOST_PROMPT_LENGTH = 3000;
+const MAX_GENERATE_PROMPT_LENGTH = 3000;
 
 export interface AiCommandsDeps {
   logger: Logger;
@@ -191,6 +192,58 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
     await ctx.reply(MESSAGES.hostPromptReset);
   });
 
+  bot.command('set_generate_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const prompt = ctx.message.text.replace(/^\/\S+\s*/, '').trim();
+    if (!prompt) {
+      await ctx.reply(MESSAGES.aiInvalidUsage('/set_generate_prompt <инструкция генератору>'));
+      return;
+    }
+    if (prompt.length > MAX_GENERATE_PROMPT_LENGTH) {
+      await ctx.reply(MESSAGES.generatePromptTooLong(MAX_GENERATE_PROMPT_LENGTH));
+      return;
+    }
+    await saveSettings(deps.store, { generatePrompt: prompt });
+    deps.logger.info('Сохранён кастомный промпт генерации вопросов');
+    await ctx.reply(MESSAGES.generatePromptSet);
+  });
+
+  bot.command('reset_generate_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    await saveSettings(deps.store, { generatePrompt: undefined });
+    deps.logger.info('Сброшен кастомный промпт генерации вопросов');
+    await ctx.reply(MESSAGES.generatePromptReset);
+  });
+
+  bot.command('generate_prompt', async (ctx) => {
+    if (ctx.from?.id !== deps.adminId) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.aiPrivateOnly);
+      return;
+    }
+    const settings = await getSettings(deps.store);
+    await ctx.reply(
+      MESSAGES.generatePromptShow(settings?.generatePrompt ?? null, DEFAULT_GENERATION_PROMPT),
+    );
+  });
+
   let generating = false;
 
   bot.command('generate', async (ctx) => {
@@ -236,11 +289,14 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
       const existingTexts = [...pool.map((q) => q.question), ...pending.map((q) => q.question)];
 
       const client = (deps.createClient ?? defaultClient)(apiKey, model);
-      const prompt = buildGenerationPrompt({
-        count: parsed.count,
-        category: parsed.category,
-        existingTexts,
-      });
+      const prompt = buildGenerationPrompt(
+        {
+          count: parsed.count,
+          category: parsed.category,
+          existingTexts,
+        },
+        settings?.generatePrompt ?? DEFAULT_GENERATION_PROMPT,
+      );
       const { rawText, usage } = await client.generate(prompt);
       const normalized = normalizeGenerated(rawText, { existingIds, existingTexts });
 

@@ -8,6 +8,7 @@ export interface AiSettingsRecord {
   apiKey: string | null;
   model: string | null;
   hostPrompt?: string;
+  generatePrompt?: string;
   updatedAt: string;
 }
 

@@ -45,7 +45,8 @@ export const MESSAGES = {
           '/metrics — метрики бота\n' +
           '/generate — генерация вопросов ИИ (OpenRouter)\n' +
           '/set_ai_key, /set_ai_model, /ai_status — настройка ИИ\n' +
-          '/set_host_prompt, /reset_host_prompt, /host_prompt — инструкция ведущему (ЛС)',
+          '/set_host_prompt, /reset_host_prompt, /host_prompt — инструкция ведущему (ЛС)\n' +
+          '/set_generate_prompt, /reset_generate_prompt, /generate_prompt — промпт генерации (ЛС)',
       );
     }
     return `📖 Команды *${botName}*:\n\n${sections.join('\n\n')}`;
@@ -234,6 +235,16 @@ export const MESSAGES = {
     prompt
       ? `🎤 Текущий промпт ведущего:\n\n${prompt}\n\nСменить: /set_host_prompt <текст>\nСброс: /reset_host_prompt`
       : `🎤 Кастомный промпт не задан — используется стандартный:\n\n${defaultPrompt}\n\nЗадать свой: /set_host_prompt <текст>`,
+  generatePromptSet:
+    '🧠 Кастомный промпт генерации вопросов сохранён.\nСброс к стандартному: /reset_generate_prompt',
+  generatePromptReset:
+    '🧠 Кастомный промпт генерации сброшен — используется стандартный.',
+  generatePromptTooLong: (max: number) =>
+    `❌ Промпт слишком длинный (максимум ${max} символов).`,
+  generatePromptShow: (prompt: string | null, defaultPrompt: string) =>
+    prompt
+      ? `🧠 Текущий промпт генерации вопросов:\n\n${prompt}\n\nСменить: /set_generate_prompt <текст>\nСброс: /reset_generate_prompt`
+      : `🧠 Кастомный промпт не задан — используется стандартный:\n\n${defaultPrompt}\n\nЗадать свой: /set_generate_prompt <текст>`,
   hostPromptTooLong: (max: number) =>
     `❌ Инструкция слишком длинная (максимум ${max} символов).`,
   aiGenerateStarted: (count: number, category: string) =>
