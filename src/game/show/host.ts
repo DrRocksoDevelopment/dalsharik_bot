@@ -20,7 +20,7 @@ export const DEFAULT_HOST_PROMPT = `Ты — Дальшарик, живой и �
 Верни ТОЛЬКО валидный JSON-объект вида {"lines": ["строка 1", "строка 2"]} без markdown-обёрток и пояснений.`;
 
 export interface HostContext {
-  chatTitle: string;
+  chatTitle?: string;
   question: Question;
   results: QuestionResults;
   users: Map<string, UserProfile>;
@@ -42,7 +42,7 @@ export function buildHostPrompt(ctx: HostContext, instruction: string = DEFAULT_
   const correct = question.answers.find((a) => a.id === question.correctAnswer);
   const parts: string[] = [];
 
-  parts.push(`Чат: ${ctx.chatTitle}`);
+  parts.push(`Чат: ${ctx.chatTitle ?? 'наш чат'}`);
   parts.push(`Событие: ${question.event.title} (${question.eventDate})`);
   parts.push(`Контекст: ${question.event.context}`);
   parts.push(`Вопрос: ${question.question}`);
@@ -110,6 +110,10 @@ export function parseShowPlan(rawText: string): ParseShowPlanResult {
   return { ok: true, lines };
 }
 
+export interface ShowHost {
+  show(chatId: string, ctx: HostContext): Promise<ShowMode>;
+}
+
 export interface AiHostDeps {
   logger: Logger;
   store: DataStore;
@@ -124,7 +128,7 @@ function defaultClient(apiKey: string, model: string): OpenRouterClient {
   return new OpenRouterClient({ apiKey, model });
 }
 
-export class AiHost {
+export class AiHost implements ShowHost {
   private readonly hostInstruction: string;
 
   constructor(private readonly deps: AiHostDeps) {
@@ -142,7 +146,8 @@ export class AiHost {
       }
 
       const client = (this.deps.createClient ?? defaultClient)(apiKey, model);
-      const prompt = buildHostPrompt(ctx, this.hostInstruction);
+      const instruction = settings?.hostPrompt ?? this.hostInstruction;
+      const prompt = buildHostPrompt(ctx, instruction);
       const { rawText } = await client.generate(prompt, {
         temperature: 0.9,
         maxTokens: 800,

@@ -57,6 +57,39 @@ export function buildEmptyResultsMessage(context: EmptyResultsContext): string {
   return parts.join('\n');
 }
 
+export function buildShowSummaryMessage(context: {
+  question: Question;
+  results: QuestionResults;
+  nextEventLocalTime?: string;
+}): string {
+  const { question, results, nextEventLocalTime } = context;
+  const correct = question.answers.find((a) => a.id === question.correctAnswer);
+  const parts: string[] = [];
+
+  parts.push('📇 Разбор завершён');
+  parts.push('');
+  parts.push(`Ответили: ${results.totalPlayers}`);
+  parts.push('');
+  parts.push('Варианты:');
+  parts.push(formatDistribution(results, question));
+  parts.push('');
+  parts.push(
+    `✅ Правильный ответ: ${question.correctAnswer}${correct ? ` — ${correct.text}` : ''}`,
+  );
+
+  if (question.sources.length > 0) {
+    parts.push('');
+    parts.push(`Источники: ${question.sources.join(', ')}`);
+  }
+
+  if (nextEventLocalTime) {
+    parts.push('');
+    parts.push(`⏭ Следующее событие — в ${nextEventLocalTime} по местному времени`);
+  }
+
+  return parts.join('\n');
+}
+
 function formatDistribution(results: QuestionResults, question: Question): string {
   const lines: string[] = [];
   for (const answer of question.answers) {

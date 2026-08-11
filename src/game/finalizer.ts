@@ -3,11 +3,17 @@ import type { DataStore } from '../storage/data-store.js';
 import { DEFAULT_CONFIG } from '../config/config.js';
 import type { PollRecord } from './poll.js';
 import { scorePollAnswers } from './score-poll.js';
-import { buildResultsMessage, buildEmptyResultsMessage } from '../content/results.js';
+import {
+  buildResultsMessage,
+  buildEmptyResultsMessage,
+  buildShowSummaryMessage,
+} from '../content/results.js';
 import { SloganEngine, type SloganContext } from '../content/slogans.js';
 import type { FinalizerSender } from '../telegram/finalizer-sender.js';
 import type { MetricsStore } from '../metrics/metrics.js';
 import { formatLocalTime } from '../utils/timezone.js';
+import { getOrCreateChat } from '../bot/chat-utils.js';
+import type { HostContext, ShowHost, ShowMode } from './show/host.js';
 
 const STREAK_HIGHLIGHT_MIN = 2;
 
@@ -17,6 +23,7 @@ export interface QuestionFinalizerDeps {
   sender: FinalizerSender;
   slogans?: SloganEngine;
   metrics?: MetricsStore;
+  host?: ShowHost;
   now?: () => number;
 }
 
@@ -28,6 +35,42 @@ const TERMINAL_STATUSES = ['completed', 'cancelled'] as const;
 
 export class DefaultQuestionFinalizer implements QuestionFinalizer {
   constructor(private readonly deps: QuestionFinalizerDeps) {}
+
+  private staticCard(context: {
+    question: import('./question.js').Question;
+    results: import('./stats.js').QuestionResults;
+    users: Map<string, import('./user.js').UserProfile>;
+    streakHighlights: { userId: string; currentStreak: number }[];
+    chatStreakRecord: number | null;
+    nextEventLocalTime?: string;
+  }): string {
+    return buildResultsMessage({
+      question: context.question,
+      results: context.results,
+      users: context.users,
+      slogan: (this.deps.slogans ?? new SloganEngine()).get({
+        isCorrect: context.results.correct > 0,
+        playersCount: context.results.totalPlayers,
+        accuracy: context.results.accuracy,
+        fastestCorrectMs: context.results.fastestCorrectMs,
+        difficulty: context.question.difficulty,
+      } satisfies SloganContext),
+      streakHighlights: context.streakHighlights,
+      chatStreakRecord: context.chatStreakRecord,
+      nextEventLocalTime: context.nextEventLocalTime,
+    });
+  }
+
+  private async publish(chatId: string, message: string): Promise<void> {
+    try {
+      await this.deps.sender.sendMessage(chatId, message);
+    } catch (err) {
+      this.deps.logger.error('Не удалось опубликовать итоги', {
+        chatId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   async finalize(poll: PollRecord): Promise<void> {
     const stored = await this.deps.store.polls.get(poll.id);
@@ -87,7 +130,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       if (chatStreakRecord === null || best > chatStreakRecord) chatStreakRecord = best;
     }
 
-    const chat = await this.deps.store.chats.get(poll.chatId);
+    const chat = await getOrCreateChat(this.deps.store, poll.chatId);
     const now = (this.deps.now ?? Date.now)();
     const timezoneOffset =
       chat?.timezoneOffsetMinutes ?? DEFAULT_CONFIG.timezoneOffsetMinutes;
@@ -96,32 +139,35 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
         ? formatLocalTime(now + chat.questionInterval * 1000, timezoneOffset)
         : undefined;
 
-    const message =
-      results.totalPlayers === 0
-        ? buildEmptyResultsMessage({ question, nextEventLocalTime })
-        : buildResultsMessage({
-            question,
-            results,
-            users,
-            slogan: (this.deps.slogans ?? new SloganEngine()).get({
-              isCorrect: results.correct > 0,
-              playersCount: results.totalPlayers,
-              accuracy: results.accuracy,
-              fastestCorrectMs: results.fastestCorrectMs,
-              difficulty: question.difficulty,
-            } satisfies SloganContext),
-            streakHighlights,
-            chatStreakRecord,
-            nextEventLocalTime,
-          });
+    const hostCtx: HostContext = {
+      question,
+      results,
+      users,
+      streakHighlights,
+      chatStreakRecord,
+      nextEventLocalTime,
+    };
 
-    try {
-      await this.deps.sender.sendMessage(poll.chatId, message);
-    } catch (err) {
-      this.deps.logger.error('Не удалось опубликовать итоги', {
-        pollId: poll.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
+    if (results.totalPlayers === 0) {
+      await this.publish(poll.chatId, buildEmptyResultsMessage({ question, nextEventLocalTime }));
+    } else if (chat?.finalization === 'ai' && this.deps.host) {
+      const mode: ShowMode = await this.deps.host.show(poll.chatId, hostCtx);
+      if (mode === 'ai') {
+        await this.publish(
+          poll.chatId,
+          buildShowSummaryMessage({ question, results, nextEventLocalTime }),
+        );
+      } else {
+        await this.publish(
+          poll.chatId,
+          this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime }),
+        );
+      }
+    } else {
+      await this.publish(
+        poll.chatId,
+        this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime }),
+      );
     }
 
     this.deps.logger.info('Вопрос завершён', {

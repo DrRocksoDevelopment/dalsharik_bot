@@ -144,8 +144,8 @@
 3. `feat:` скоринг на финализации (идемпотентно) + тесты. — готово (`1e09d06`)
 4. `feat:` stream.ts (edit-стриминг) + тесты. — готово (`941d9d0`)
 5. `feat:` AI-ведущий (SSE + фолбэк) + тесты. — готово (`7ff2197`)
-6. `feat:` `/set_finalization`, `/set_host_prompt`, `/reset_host_prompt`, help + тесты. — готово
-7. `feat:` интеграция + game-flow тесты; CHANGELOG + релиз minor.
+6. `feat:` `/set_finalization`, `/set_host_prompt`, `/reset_host_prompt`, help + тесты. — готово (`3ae17e9`)
+7. `feat:` интеграция (AiHost + EditTextStreamer в finalizer) + game-flow тесты; CHANGELOG — готово; остаётся релиз minor (`npm run release:minor`).
 
 ## Стратегия коммитов
 

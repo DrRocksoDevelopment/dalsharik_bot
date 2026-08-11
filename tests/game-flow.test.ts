@@ -1,9 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { processPollAnswer } from '../src/game/answer-processor.js';
 import { DefaultQuestionFinalizer } from '../src/game/finalizer.js';
 import type { FinalizerSender } from '../src/telegram/finalizer-sender.js';
+import type { ShowHost } from '../src/game/show/host.js';
 import type { PollAnswer } from '@telegraf/types';
-import { makeLogger, makePoll, makeQuestion, makeTempStore, type TempStore } from './helpers.js';
+import {
+  makeChatRecord,
+  makeLogger,
+  makePoll,
+  makeQuestion,
+  makeTempStore,
+  type TempStore,
+} from './helpers.js';
 
 const tempStores: TempStore[] = [];
 
@@ -97,5 +105,101 @@ describe('игровой цикл', () => {
 
     expect(calls.lastText).toContain('🏆 За этот вопрос');
     expect(calls.lastText).toMatch(/Варианты:\n🔴 A — 1\n🔴 B — 0\n🟢 C — 1\n🔴 D — 0/);
+  });
+
+  it('AI-режим: ведущий проводит шоу, после — компактная карточка', async () => {
+    const t = await setupGame();
+    const deps = { logger: makeLogger(), store: t.store };
+    await processPollAnswer(makePollAnswer(1, [2]), 1001, deps);
+    await processPollAnswer(makePollAnswer(2, [0]), 1002, deps);
+
+    const show = vi.fn().mockResolvedValue('ai');
+    const host = { show } as unknown as ShowHost;
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+      host,
+    });
+    await finalizer.finalize((await t.store.polls.get('poll-rec-1'))!);
+
+    expect(show).toHaveBeenCalledTimes(1);
+    const [chatId, ctx] = show.mock.calls[0] as [string, Parameters<ShowHost['show']>[1]];
+    expect(chatId).toBe('-100123');
+    expect(ctx.results.totalPlayers).toBe(2);
+    expect(ctx.question.id).toBe('event_000001');
+
+    expect(calls.messages).toBe(1);
+    expect(calls.lastText).toContain('📇 Разбор завершён');
+    expect(calls.lastText).toContain('Ответили: 2');
+    expect(calls.lastText).toContain('✅ Правильный ответ: C — вариант C');
+    expect(calls.lastText).toContain('Источники: https://example.com');
+    expect(calls.lastText).not.toContain('🏁 Итоги');
+
+    const stored = await t.store.polls.get('poll-rec-1');
+    expect(stored?.status).toBe('completed');
+  });
+
+  it('AI-режим: фолбэк на статичную карточку, когда ведущий вернул static', async () => {
+    const t = await setupGame();
+    const deps = { logger: makeLogger(), store: t.store };
+    await processPollAnswer(makePollAnswer(1, [2]), 1001, deps);
+
+    const show = vi.fn().mockResolvedValue('static');
+    const host = { show } as unknown as ShowHost;
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+      host,
+    });
+    await finalizer.finalize((await t.store.polls.get('poll-rec-1'))!);
+
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(calls.messages).toBe(1);
+    expect(calls.lastText).toContain('🏁 Итоги');
+    expect(calls.lastText).toContain('Точность:');
+    expect(calls.lastText).not.toContain('📇 Разбор завершён');
+  });
+
+  it('static-режим: ведущий не вызывается, итоги — статичная карточка', async () => {
+    const t = await setupGame();
+    await t.store.chats.insert(makeChatRecord('-100123', { finalization: 'static' }));
+    const deps = { logger: makeLogger(), store: t.store };
+    await processPollAnswer(makePollAnswer(1, [2]), 1001, deps);
+
+    const show = vi.fn();
+    const host = { show } as unknown as ShowHost;
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+      host,
+    });
+    await finalizer.finalize((await t.store.polls.get('poll-rec-1'))!);
+
+    expect(show).not.toHaveBeenCalled();
+    expect(calls.lastText).toContain('🏁 Итоги');
+  });
+
+  it('AI-режим без участников: компактное раскрытие, ведущий не вызывается', async () => {
+    const t = await setupGame();
+    const show = vi.fn();
+    const host = { show } as unknown as ShowHost;
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+      host,
+    });
+    await finalizer.finalize((await t.store.polls.get('poll-rec-1'))!);
+
+    expect(show).not.toHaveBeenCalled();
+    expect(calls.messages).toBe(1);
+    expect(calls.lastText).toContain('🙊 Никто не ответил.');
   });
 });

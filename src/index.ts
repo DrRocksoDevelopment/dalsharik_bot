@@ -16,6 +16,8 @@ import { processPollAnswer } from './game/answer-processor.js';
 import { DefaultScheduler } from './scheduler/scheduler.js';
 import { JsonMetricsStore } from './metrics/metrics-store.js';
 import { QuestionReloader } from './game/question-reloader.js';
+import { TelegramStreamSender, EditTextStreamer } from './telegram/stream.js';
+import { AiHost } from './game/show/host.js';
 import {
   buildQuestionReviewText,
   buildQuestionReviewKeyboard,
@@ -59,11 +61,24 @@ export async function main(): Promise<void> {
     metrics,
   });
 
+  const streamer = new EditTextStreamer({
+    sender: new TelegramStreamSender(bot.telegram),
+    logger,
+  });
+  const host = new AiHost({
+    logger,
+    store,
+    streamer,
+    envApiKey: env.openrouterApiKey,
+    envModel: env.openrouterModel,
+  });
+
   const finalizer = new DefaultQuestionFinalizer({
     logger,
     store,
     sender: new TelegramFinalizerSender(bot.telegram),
     metrics,
+    host,
   });
 
   reloader = new QuestionReloader({
