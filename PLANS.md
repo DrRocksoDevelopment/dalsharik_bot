@@ -68,41 +68,79 @@
 
 Идея: вместо викторин — обычные опросы; правильный ответ и объяснение раскрываются
 на финализации, когда AI-«ведущий» вживую стримит разбор результатов.
+Ветка: `feature/show-mode`.
 
-### 1. Обычные опросы вместо викторин
-- `quiz-sender.ts:24` → `sendPoll` без `correct_option_id`/`explanation`; `is_anonymous: false`.
-- Голоса: UPSERT «последний голос побеждает» (сейчас повторы игнорируются, answer-processor.ts:50-57).
-- `isCorrect` проставляется на финализации.
+Решения (11.08.2026):
+- Обычный опрос вместо викторины; `is_anonymous: false`; голоса можно менять/отзывать,
+  «последний голос побеждает».
+- Скоринг на финализации, идемпотентный: источник истины — `answers`, пользователи
+  пересчитываются из всех их ответов.
+- Стриминг — `sendMessage` + прогрессивный `editMessageText` (`sendMessageDraft` в группах
+  невозможен: по Bot API работает только в private-чатах, `TEXTDRAFT_PEER_INVALID`).
+- Финализация по умолчанию `'ai'`; без ключа/модели/при ошибке — тихий фолбэк на статику.
+- После шоу — компактная стат-карточка (варианты, источники, превью следующего события).
+- `totalPlayers === 0` → без AI и карточки: компактное статичное раскрытие ответа
+  («Никто не ответил. Правильный ответ: …» + объяснение + источники + превью). Порог жёсткий = 1.
+- Промпт ведущего: единый дефолтный образ в коде; суперадмин правит через
+  `/set_host_prompt` / `/reset_host_prompt` (`AiSettingsRecord.hostPrompt`).
+- `ChatConfig.subscription: boolean` (default `false`) — флаг-заглушка подписочного режима,
+  пока ничего не гейтит.
 
-### 2. Скоринг на финализации
-- `answer-processor.ts:79` перестаёт начислять очки (нет `correct_option_id`) — только фиксирует голос.
-- `finalizer.ts`: после `closePoll` — расчёт корректности по последним голосам, начисление очков/серий
-  (`scoring.ts`, `user-service.ts`), обновление users/answers/метрик.
+### 1. Обычный опрос вместо викторины
+- `src/telegram/quiz-sender.ts` → `sendPoll` без `correct_option_id`/`explanation`; `is_anonymous: false`.
+- `src/game/publisher.ts` `buildQuizPayload` → `buildPollPayload` (текст/варианты/optionMap; без правильного).
+- `Question`/`PollRecord` не меняются; флаг типа опроса не нужен.
 
-### 3. AI-ведущий («хост-режим»)
-- Новый `src/game/show/host.ts`:
-  - `buildHostPrompt(...)`: вопрос + контекст/объяснение, правильный ответ, распределение голосов, топ, серии.
-  - Потоковая генерация через OpenRouter (SSE, `stream: true`).
-  - Фолбэк: нет ключа/ошибка/таймаут → статичный `buildResultsMessage` (finalizer.ts:101).
+### 2. Регистрация голосов (answer-processor)
+- `processPollAnswer` перестаёт начислять очки/серии/метрики:
+  - пустые `option_ids` → отзыв голоса (удалить `AnswerRecord` `id = ${telegramPollId}:${userId}`);
+  - иначе UPSERT последнего голоса (вариант + время побеждают);
+  - обновлять только отображаемые данные пользователя (имена).
+- `AnswerRecord`: `isCorrect?`, `points?`, `scoredAt?`.
 
-### 4. Стриминг текста (новые возможности Telegram)
-- `src/telegram/stream.ts`:
-  - Основной транспорт: `sendMessageDraft` (Bot API 9.5+, нативный инплейс-стрим). Если в группах работает
-    нормально — использовать только его.
-  - Верификация в группах (по доке live-черновики ограничены ЛС): при сбое — фолбэк на
-    `sendMessage` + повторные `editMessageText` (пауза ≥1 c, суффикс «…»).
-  - telegraf 4.x новые методы не типизирует → `bot.telegram.callApi(...)`.
+### 3. Скоринг на финализации
+- Новая функция `scorePollAnswers(...)`: `isCorrect = selectedOption === question.correctAnswer`,
+  очки по `calculatePoints` с учётом серии.
+- `finalizer.ts`:
+  1. `answers.mutate` — проставить `isCorrect`/`points`/`scoredAt`;
+  2. `users.mutate` — пересчёт затронутых пользователей из всех их answers (идемпотентно);
+  3. `metrics.recordAnswer` (с финальным `isCorrect`) переносится сюда.
+- 0 участников → компактное раскрытие; 1+ → шоу/карточка.
 
-### 5. Конфиг
-- `ChatConfig.finalization: 'ai' | 'static'` + команда смены (расширение `/config`).
+### 4. Стриминг текста (`src/telegram/stream.ts`)
+- Интерфейс `TextStreamer`: `stream(chatId, chunks: AsyncIterable<string>)`.
+- `EditTextStreamer` (основной, группы): `sendMessage` первой порцией → повторные
+  `editMessageText` с суффиксом «…», пауза ≥1 c, финальный flush; при ошибке edit — деградация
+  до обычного `sendMessage`.
+- `DraftTextStreamer` — опционально за флагом `STREAM_BACKEND`; DM-only, вне группового флоу.
+- telegraf 4.16.3 типизирует `editMessageText`; `callApi` нужен только для draft.
 
-### 6. Порядок работ
-1. UPSERT последнего голоса + перенос скоринга в финализатор + тесты.
-2. `sendPoll` вместо `sendQuiz` + тесты.
-3. `stream.ts`: `sendMessageDraft` + верификация в группах + фолбэк `editMessageText` + тесты.
-4. `host.ts`: AI-генерация (SSE) + фолбэк на статику + тесты.
-5. Интеграция в `finalizer.ts`.
-6. CHANGELOG + релиз minor.
+### 5. AI-ведущий
+- `OpenRouterClient.streamGenerate(prompt): AsyncIterable<string>` — SSE (`stream: true`),
+  без `json_object`/web_search, `temperature ~0.9`, `max_tokens ~800`.
+- `src/game/show/host.ts`:
+  - `buildHostPrompt(ctx)` — вопрос + контекст + правильный ответ + объяснение + источники,
+    распределение голосов, топ, серии, название чата, превью следующего события;
+    живой ведущий, русский, без markdown, ≤ ~250 слов.
+  - `AiHost` — резолв ключа/модели (`aiSettings ?? env`) и `hostPrompt ?? default`;
+    стрим в `TextStreamer`; любая ошибка/таймаут/нет ключа → статичная карточка.
+
+### 6. Конфиг и команды
+- `ChatConfig.finalization: 'ai' | 'static'` (default `'ai'`), `ChatConfig.subscription: boolean`
+  (default `false`); `isValidChatConfig` + нормализация.
+- `AiSettingsRecord.hostPrompt?: string` + миграция ключа в старых записях settings
+  (`update()` фильтрует ключи по существующим).
+- Команды: `/set_finalization ai|static` (админ), `/set_host_prompt` / `/reset_host_prompt`
+  (суперадмин, ЛС), help.
+
+### 7. Порядок работ
+1. `refactor:` sender/publisher → обычный poll + тесты.
+2. `refactor:` answer-processor → фиксация голосов (upsert/отзыв) + тесты.
+3. `feat:` скоринг на финализации (идемпотентно) + тесты.
+4. `feat:` stream.ts (edit-стриминг) + тесты.
+5. `feat:` AI-ведущий (SSE + фолбэк) + тесты.
+6. `feat:` `/set_finalization`, `/set_host_prompt`, `/reset_host_prompt`, help + тесты.
+7. `feat:` интеграция + game-flow тесты; CHANGELOG + релиз minor.
 
 ## Стратегия коммитов
 
