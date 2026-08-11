@@ -1,19 +1,12 @@
 import type { Logger } from 'winston';
 import type { DataStore } from '../storage/data-store.js';
 import type { PollAnswer } from '@telegraf/types';
-import { calculatePoints } from './scoring.js';
-import { newUserProfile, applyAnswerToUser } from './user-service.js';
 import type { AnswerRecord } from './answer.js';
-import type { MetricsStore } from '../metrics/metrics.js';
+import { newUserProfile } from './user-service.js';
 
 export interface AnswerProcessorDeps {
   logger: Logger;
   store: DataStore;
-  metrics?: MetricsStore;
-}
-
-function isActivePoll(status: string | undefined): boolean {
-  return status === 'active';
 }
 
 export async function processPollAnswer(
@@ -29,7 +22,7 @@ export async function processPollAnswer(
     return;
   }
 
-  if (!isActivePoll(poll.status)) {
+  if (poll.status !== 'active') {
     deps.logger.warn('Ответ по закрытому poll проигнорирован', {
       telegramPollId,
       status: poll.status,
@@ -44,20 +37,22 @@ export async function processPollAnswer(
   }
 
   const userId = String(userInfo.id);
-  const existing = await deps.store.answers.find(
-    (a) => a.telegramPollId === telegramPollId && a.userId === userId,
-  );
-  if (existing.length > 0) {
-    deps.logger.warn('Повторная обработка ответа игнорируется', {
-      telegramPollId,
-      userId,
-      updateId,
-    });
+  const answerId = `${telegramPollId}:${userId}`;
+  const optionIds = pollAnswer.option_ids ?? [];
+
+  if (optionIds.length === 0) {
+    const [existing] = await deps.store.answers.find((a) => a.id === answerId);
+    if (existing) {
+      await deps.store.answers.delete(answerId);
+      deps.logger.info('Голос отозван', { telegramPollId, userId, updateId });
+    } else {
+      deps.logger.debug('Отзыв без сохранённого голоса', { telegramPollId, userId });
+    }
     return;
   }
 
-  const optionId = pollAnswer.option_ids?.[0];
-  if (optionId === undefined || optionId < 0 || optionId >= poll.optionMap.length) {
+  const optionId = optionIds[0]!;
+  if (optionId < 0 || optionId >= poll.optionMap.length) {
     deps.logger.warn('Некорректный option_id', { telegramPollId, userId, optionId });
     return;
   }
@@ -75,14 +70,29 @@ export async function processPollAnswer(
     ? 0
     : Math.max(0, answeredAtMs - pollCreatedAt);
 
-  const alreadyAnswered = await isRepeat(deps.store, userId, question.id);
-  const isCorrect = selectedOption === question.correctAnswer;
+  const [existingAnswer] = await deps.store.answers.find((a) => a.id === answerId);
+  const alreadyAnswered = existingAnswer?.isRepeat ?? (await isRepeat(deps.store, userId, question.id));
 
-  let points = 0;
-  let isRepeatAnswer = alreadyAnswered;
-  let score = 0;
-  let currentStreak = 0;
-  let bestStreak = 0;
+  const record: AnswerRecord = {
+    ...existingAnswer,
+    id: answerId,
+    userId,
+    chatId: poll.chatId,
+    questionId: question.id,
+    telegramPollId,
+    selectedOption,
+    answeredAt: new Date(answeredAtMs).toISOString(),
+    reactionTimeMs,
+    isRepeat: alreadyAnswered,
+    updateId,
+  };
+
+  await deps.store.answers.mutate((items) => {
+    const idx = items.findIndex((a) => a.id === answerId);
+    if (idx === -1) items.push(record);
+    else items[idx] = record;
+  });
+
   await deps.store.users.mutate((users) => {
     let user = users.find((u) => u.id === userId);
     if (!user) {
@@ -102,66 +112,19 @@ export async function processPollAnswer(
       user.username = userInfo.username;
       user.firstName = userInfo.first_name;
       user.lastName = userInfo.last_name;
+      user.updatedAt = new Date(answeredAtMs).toISOString();
     }
-
-    const pointsResult = calculatePoints({
-      difficulty: question.difficulty,
-      streak: user.currentStreak,
-      alreadyAnswered,
-    });
-    isRepeatAnswer = pointsResult.isRepeat;
-    points = isCorrect ? pointsResult.points : 0;
-    const applied = applyAnswerToUser(user, isCorrect, isRepeatAnswer, points);
-    score = applied.score;
-    currentStreak = applied.currentStreak;
-    bestStreak = applied.bestStreak;
-
-    user.score = applied.score;
-    user.currentStreak = applied.currentStreak;
-    user.bestStreak = applied.bestStreak;
-    user.streakMultiplier = applied.streakMultiplier;
-    user.answers += 1;
-    user.correct += isCorrect ? 1 : 0;
-    user.wrong += isCorrect ? 0 : 1;
-    user.updatedAt = new Date(answeredAtMs).toISOString();
   });
 
-  const answer: AnswerRecord = {
-    id: `${telegramPollId}:${userId}`,
-    userId,
-    chatId: poll.chatId,
-    questionId: question.id,
+  deps.logger.info('Голос зафиксирован', {
     telegramPollId,
+    userId,
+    chatId: poll.chatId,
+    questionId: question.id,
     selectedOption,
-    isCorrect,
-    answeredAt: new Date(answeredAtMs).toISOString(),
+    isRepeat: alreadyAnswered,
     reactionTimeMs,
-    points,
-    isRepeat: isRepeatAnswer,
     updateId,
-  };
-  await deps.store.answers.insert(answer);
-
-  await deps.metrics?.recordAnswer({
-    userId,
-    chatId: poll.chatId,
-    questionId: question.id,
-    isCorrect,
-    reactionTimeMs,
-    selectedOption,
-    score,
-    currentStreak,
-    bestStreak,
-  });
-
-  deps.logger.info('Ответ обработан', {
-    userId,
-    chatId: poll.chatId,
-    questionId: question.id,
-    isCorrect,
-    points,
-    isRepeat: isRepeatAnswer,
-    reactionTimeMs,
   });
 }
 

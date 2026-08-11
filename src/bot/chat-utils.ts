@@ -33,6 +33,9 @@ export function normalizeChatConfig(cfg: ChatConfig): ChatConfig {
       typeof cfg.timezoneOffsetMinutes === 'number'
         ? cfg.timezoneOffsetMinutes
         : defaults.timezoneOffsetMinutes,
+    finalization: cfg.finalization === 'static' ? 'static' : 'ai',
+    subscription:
+      typeof cfg.subscription === 'boolean' ? cfg.subscription : defaults.subscription,
   };
 }
 
@@ -55,6 +58,12 @@ export async function getOrCreateChat(
     }
     if (!sameStringArray(record.questionTypes, existing.questionTypes)) {
       patch.questionTypes = record.questionTypes;
+    }
+    if (record.finalization !== existing.finalization) {
+      patch.finalization = record.finalization;
+    }
+    if (record.subscription !== existing.subscription) {
+      patch.subscription = record.subscription;
     }
     if (Object.keys(patch).length > 1) {
       await store.chats.mutate((items) => {

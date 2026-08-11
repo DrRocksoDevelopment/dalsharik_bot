@@ -2,13 +2,13 @@ import Transport from 'winston-transport';
 import { Telegraf } from 'telegraf';
 
 interface TelegramTransportOptions extends Transport.TransportStreamOptions {
-  bot: Telegraf;
+  getBot: () => Telegraf;
   chatId: string;
   maxLength?: number;
 }
 
 export class TelegramTransport extends Transport {
-  private readonly bot: Telegraf;
+  private readonly getBot: () => Telegraf;
   private readonly chatId: string;
   private readonly maxLength: number;
   private readonly minLevel: string;
@@ -18,7 +18,7 @@ export class TelegramTransport extends Transport {
 
   constructor(opts: TelegramTransportOptions) {
     super(opts);
-    this.bot = opts.bot;
+    this.getBot = opts.getBot;
     this.chatId = opts.chatId;
     this.maxLength = opts.maxLength ?? 4000;
     this.minLevel = opts.level ?? 'error';
@@ -51,12 +51,14 @@ export class TelegramTransport extends Transport {
       }
 
       this.isSending = true;
-      const message = `[${info.level.toUpperCase()}] ${info.message}`;
+      const error = info.error !== undefined ? ` — ${String(info.error)}` : '';
+      const message = `[${info.level.toUpperCase()}] ${info.message}${error}`;
       const safe = message.length > this.maxLength
         ? `${message.slice(0, this.maxLength - 3)}...`
         : message;
 
-      this.bot.telegram
+      this.getBot()
+        .telegram
         .sendMessage(this.chatId, safe)
         .then(() => {
           this.sent.push(Date.now());

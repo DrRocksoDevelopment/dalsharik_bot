@@ -5,10 +5,11 @@ export interface AnswerRecord {
   questionId: string;
   telegramPollId: string;
   selectedOption: string;
-  isCorrect: boolean;
+  isCorrect?: boolean;
   answeredAt: string;
   reactionTimeMs: number;
-  points: number;
+  points?: number;
   isRepeat: boolean;
+  scoredAt?: string;
   updateId: number;
 }

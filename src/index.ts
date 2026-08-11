@@ -9,13 +9,15 @@ import { createDataStore } from './storage/data-store.js';
 import { initLogger } from './logging/logger.js';
 import { DefaultQuestionPublisher } from './game/publisher.js';
 import { InMemoryQuestionEngine } from './game/question-engine.js';
-import { TelegramQuizSender } from './telegram/quiz-sender.js';
+import { TelegramPollSender } from './telegram/poll-sender.js';
 import { TelegramFinalizerSender } from './telegram/finalizer-sender.js';
 import { DefaultQuestionFinalizer } from './game/finalizer.js';
 import { processPollAnswer } from './game/answer-processor.js';
 import { DefaultScheduler } from './scheduler/scheduler.js';
 import { JsonMetricsStore } from './metrics/metrics-store.js';
 import { QuestionReloader } from './game/question-reloader.js';
+import { TelegramStreamSender, EditTextStreamer } from './telegram/stream.js';
+import { AiHost } from './game/show/host.js';
 import {
   buildQuestionReviewText,
   buildQuestionReviewKeyboard,
@@ -24,6 +26,7 @@ import {
 import { registerImport } from './bot/import-commands.js';
 import { registerMetricsCommand } from './bot/metrics-commands.js';
 import { registerAiCommands } from './bot/ai-commands.js';
+import { registerBroadcastCommand } from './bot/broadcast-commands.js';
 
 export async function main(): Promise<void> {
   await fs.mkdir(env.dataDir, { recursive: true });
@@ -43,7 +46,7 @@ export async function main(): Promise<void> {
     store,
     adminId: env.botAdminId,
     pollAnswerHandler: (pollAnswer, updateId) =>
-      processPollAnswer(pollAnswer, updateId, { logger, store, metrics }),
+      processPollAnswer(pollAnswer, updateId, { logger, store }),
     onChatChanged: (chatId) => scheduler?.scheduleChat(chatId) ?? Promise.resolve(),
     ensureScheduled: (chatId) => scheduler?.ensureScheduled(chatId) ?? Promise.resolve(),
     nextPublishAt: (chatId) => scheduler?.getNextPublishAt(chatId) ?? Promise.resolve(null),
@@ -55,7 +58,20 @@ export async function main(): Promise<void> {
     logger,
     store,
     engine,
-    sender: new TelegramQuizSender(bot.telegram),
+    sender: new TelegramPollSender(bot.telegram),
+    metrics,
+  });
+
+  const streamer = new EditTextStreamer({
+    sender: new TelegramStreamSender(bot.telegram),
+    logger,
+  });
+  const host = new AiHost({
+    logger,
+    store,
+    streamer,
+    envApiKey: env.openrouterApiKey,
+    envModel: env.openrouterModel,
     metrics,
   });
 
@@ -64,6 +80,7 @@ export async function main(): Promise<void> {
     store,
     sender: new TelegramFinalizerSender(bot.telegram),
     metrics,
+    host,
   });
 
   reloader = new QuestionReloader({
@@ -110,8 +127,15 @@ export async function main(): Promise<void> {
     adminId: env.botAdminId,
     store,
     reloader,
+    metrics,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
+  });
+
+  registerBroadcastCommand(bot, {
+    logger,
+    adminId: env.botAdminId,
+    store,
   });
 
   scheduler = new DefaultScheduler({ logger, store, publisher, finalizer });

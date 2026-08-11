@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { TelegramQuizSender } from '../src/telegram/quiz-sender.js';
+import { TelegramPollSender } from '../src/telegram/poll-sender.js';
 import { TelegramFinalizerSender } from '../src/telegram/finalizer-sender.js';
 import { makeBotHarness, type BotHarness } from './helpers.js';
 
@@ -10,16 +10,14 @@ describe('telegram senders', () => {
     await h.cleanup();
   });
 
-  it('TelegramQuizSender отправляет викторину и возвращает id', async () => {
+  it('TelegramPollSender отправляет обычный опрос и возвращает id', async () => {
     h = await makeBotHarness();
-    const sender = new TelegramQuizSender(h.bot.telegram);
+    const sender = new TelegramPollSender(h.bot.telegram);
 
-    const sent = await sender.sendQuiz({
+    const sent = await sender.sendPoll({
       chatId: '-100123',
       text: 'Что произошло дальше?',
       options: ['A', 'B', 'C', 'D'],
-      correctOptionId: 2,
-      explanation: 'Объяснение',
     });
 
     expect(sent).toEqual({ messageId: 1, pollId: 'poll-1' });
@@ -28,11 +26,11 @@ describe('telegram senders', () => {
     expect(question).toBe('Что произошло дальше?');
     expect(options).toEqual(['A', 'B', 'C', 'D']);
     expect(extra).toMatchObject({
-      correct_option_id: 2,
-      explanation: 'Объяснение',
       is_anonymous: false,
-      type: 'quiz',
+      type: 'regular',
     });
+    expect(extra).not.toHaveProperty('correct_option_id');
+    expect(extra).not.toHaveProperty('explanation');
   });
 
   it('TelegramFinalizerSender закрывает опрос и возвращает явку', async () => {

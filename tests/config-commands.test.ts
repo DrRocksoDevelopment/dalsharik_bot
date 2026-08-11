@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Telegram } from 'telegraf';
 import { registerConfigCommands } from '../src/bot/config-commands.js';
 import { MESSAGES } from '../src/content/messages.js';
 import { makeBotHarness, makeChatRecord, makeLogger, commandUpdate, type BotHarness } from './helpers.js';
@@ -38,10 +39,38 @@ describe('config-commands', () => {
     expect(lastReply(h)).toContain('answerWindow');
   });
 
-  it('/set_answer_window с задержкой меньше 60 сек отклоняется', async () => {
+  it('/set_answer_window суперадмин ставит меньше 60 сек', async () => {
     h = await setup();
     await h.bot.handleUpdate(commandUpdate('/set_answer_window 30', { fromId: ADMIN_ID }));
-    expect(lastReply(h)).toBe(MESSAGES.invalidValue('/set_answer_window 3600'));
+    expect((await h.store.chats.get('-100123'))?.answerWindow).toBe(30);
+    expect(lastReply(h)).toContain('answerWindow');
+  });
+
+  it('/set_answer_window суперадмин не может поставить 0', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_answer_window 0', { fromId: ADMIN_ID }));
+    expect(lastReply(h)).toBe(MESSAGES.invalidSeconds('/set_answer_window 3600', 1));
+    expect((await h.store.chats.get('-100123'))?.answerWindow).toBe(3600);
+  });
+
+  it('/set_answer_window меньше 60 сек отклоняется у админа группы', async () => {
+    h = await setup();
+    vi.mocked(Telegram.prototype.callApi).mockImplementation(((
+      method: string,
+      payload: Record<string, unknown>,
+    ) => {
+      if (method === 'getChatAdministrators') {
+        return Promise.resolve([{ user: { id: 999, is_bot: false, first_name: 'Admin' }, status: 'administrator' }]);
+      }
+      if (method === 'sendMessage') {
+        h.sendMessage(payload.chat_id, payload.text, payload);
+        return Promise.resolve({ message_id: 1 });
+      }
+      return Promise.resolve({});
+    }) as never);
+
+    await h.bot.handleUpdate(commandUpdate('/set_answer_window 30', { fromId: 999 }));
+    expect(lastReply(h)).toBe(MESSAGES.invalidSeconds('/set_answer_window 3600', 60));
     expect((await h.store.chats.get('-100123'))?.answerWindow).toBe(3600);
   });
 
@@ -50,6 +79,34 @@ describe('config-commands', () => {
     await h.bot.handleUpdate(commandUpdate('/set_interval 7200', { fromId: ADMIN_ID }));
     expect((await h.store.chats.get('-100123'))?.questionInterval).toBe(7200);
     expect(lastReply(h)).toContain('questionInterval');
+  });
+
+  it('/set_interval суперадмин ставит меньше 60 сек', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_interval 10', { fromId: ADMIN_ID }));
+    expect((await h.store.chats.get('-100123'))?.questionInterval).toBe(10);
+    expect(lastReply(h)).toContain('questionInterval');
+  });
+
+  it('/set_interval меньше 60 сек отклоняется у админа группы', async () => {
+    h = await setup();
+    vi.mocked(Telegram.prototype.callApi).mockImplementation(((
+      method: string,
+      payload: Record<string, unknown>,
+    ) => {
+      if (method === 'getChatAdministrators') {
+        return Promise.resolve([{ user: { id: 999, is_bot: false, first_name: 'Admin' }, status: 'administrator' }]);
+      }
+      if (method === 'sendMessage') {
+        h.sendMessage(payload.chat_id, payload.text, payload);
+        return Promise.resolve({ message_id: 1 });
+      }
+      return Promise.resolve({});
+    }) as never);
+
+    await h.bot.handleUpdate(commandUpdate('/set_interval 30', { fromId: 999 }));
+    expect(lastReply(h)).toBe(MESSAGES.invalidSeconds('/set_interval 7200', 60));
+    expect((await h.store.chats.get('-100123'))?.questionInterval).toBe(7200);
   });
 
   it('/set_types обновляет типы', async () => {
@@ -97,10 +154,37 @@ describe('config-commands', () => {
     expect(lastReply(h)).toBe(MESSAGES.invalidTimeZone);
   });
 
+  it('/set_finalization ai обновляет режим', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_finalization ai', { fromId: ADMIN_ID }));
+    expect((await h.store.chats.get('-100123'))?.finalization).toBe('ai');
+    expect(lastReply(h)).toContain('AI-ведущий');
+  });
+
+  it('/set_finalization static обновляет режим', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_finalization static', { fromId: ADMIN_ID }));
+    expect((await h.store.chats.get('-100123'))?.finalization).toBe('static');
+    expect(lastReply(h)).toContain('статичная карточка');
+  });
+
+  it('/set_finalization с неизвестным значением отклоняется', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_finalization bogus', { fromId: ADMIN_ID }));
+    expect(lastReply(h)).toBe(MESSAGES.invalidFinalization);
+    expect((await h.store.chats.get('-100123'))?.finalization).toBeUndefined();
+  });
+
   it('не-админ не может менять конфигурацию', async () => {
     h = await setup();
     await h.bot.handleUpdate(commandUpdate('/set_answer_window 3600', { fromId: 999 }));
     expect(lastReply(h)).toBe(MESSAGES.notAdmin);
     expect((await h.store.chats.get('-100123'))?.answerWindow).toBe(3600);
+  });
+
+  it('/set_finalization отклоняет не-админа', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_finalization static', { fromId: 999 }));
+    expect(lastReply(h)).toBe(MESSAGES.notAdmin);
   });
 });

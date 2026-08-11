@@ -20,6 +20,8 @@ function makeChat(chatId: string, overrides: Partial<ChatConfig> = {}): ChatReco
     difficultyMin: 1,
     difficultyMax: 5,
     timezoneOffsetMinutes: 180,
+    finalization: 'ai',
+    subscription: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,
@@ -122,6 +124,36 @@ describe('scheduler', () => {
     expect(finalized).toEqual(['expired']);
     const stored = await t.store.polls.get('expired');
     expect(stored?.status).toBe('completed');
+
+    await scheduler.stop();
+  });
+
+  it('ошибка финализации не зависает чат: повтор через retryDelayMs', async () => {
+    await t.store.chats.insert(makeChat('-100123'));
+    await t.store.polls.insert(makeActivePoll('-100123', { id: 'stuck', expiresInMs: -5000 }));
+    const { publisher } = makePublisher(t.store, []);
+    const finalized: string[] = [];
+    const finalizer: PollFinalizer = {
+      async finalize(poll) {
+        finalized.push(poll.id);
+        if (finalized.length === 1) throw new Error('boom');
+        await t.store.polls.update(poll.id, { status: 'completed' });
+      },
+    };
+
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      retryDelayMs: 50,
+    });
+    await scheduler.start();
+
+    await sleep(250);
+    expect(finalized).toEqual(['stuck', 'stuck']);
+    expect((await t.store.polls.get('stuck'))?.status).toBe('completed');
+    expect(await scheduler.getNextPublishAt('-100123')).not.toBeNull();
 
     await scheduler.stop();
   });

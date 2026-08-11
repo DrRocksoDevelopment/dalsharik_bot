@@ -24,7 +24,7 @@ function makePollAnswer(userId: number, optionIndex: number, pollId: string) {
 }
 
 describe('надёжность', () => {
-  it('параллельные ответы одного пользователя не теряют начисления (атомарный users.mutate)', async () => {
+  it('параллельные голоса одного пользователя не теряются (атомарный upsert)', async () => {
     const t = await makeTempStore();
     tempStores.push(t);
     const question = makeQuestion();
@@ -39,15 +39,14 @@ describe('надёжность', () => {
 
     const user = await t.store.users.get('42');
     expect(user).not.toBeNull();
-    expect(user!.answers).toBe(2);
-    expect(user!.correct).toBe(2);
-    expect(user!.score).toBeGreaterThan(0);
 
     const answers = await t.store.answers.getAll();
     expect(answers).toHaveLength(2);
+    expect(answers.map((a) => a.telegramPollId).sort()).toEqual(['tp-1', 'tp-2']);
+    expect(answers.every((a) => a.selectedOption === 'C')).toBe(true);
   });
 
-  it('poll сохраняется как sending до отправки в Telegram (sendQuiz падает)', async () => {
+  it('poll сохраняется как sending до отправки в Telegram (sendPoll падает)', async () => {
     const t = await makeTempStore();
     tempStores.push(t);
     const question = makeQuestion();
@@ -57,7 +56,7 @@ describe('надёжность', () => {
       store: t.store,
       engine: new InMemoryQuestionEngine([question]),
       sender: {
-        async sendQuiz() {
+        async sendPoll() {
           throw new Error('telegram down');
         },
       },

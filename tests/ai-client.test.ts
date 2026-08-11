@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { OpenRouterClient, OpenRouterError } from '../src/ai/openrouter-client.js';
+import { OpenRouterClient, OpenRouterError, getOrCreateClient } from '../src/ai/openrouter-client.js';
 
 const PRICING_BODY = JSON.stringify({
   data: [
@@ -54,6 +54,17 @@ describe('OpenRouterClient.generate', () => {
     ]);
     expect(body.response_format).toEqual({ type: 'json_object' });
     expect(init.headers).toMatchObject({ Authorization: 'Bearer k' });
+  });
+
+  it('заголовок X-OpenRouter-Title содержит только ASCII-символы', async () => {
+    const fetchMock = makeFetchMock();
+    const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
+    await client.generate('сгенерируй');
+    const url = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/chat/completions'));
+    const init = url![1] as RequestInit;
+    const title = (init.headers as Record<string, string>)['X-OpenRouter-Title'];
+    expect(title).toBe('Dalsharik');
+    expect([...title!].every((c) => c.charCodeAt(0) <= 255)).toBe(true);
   });
 
   it('рассчитывает стоимость с учётом web-поиска', async () => {
@@ -111,6 +122,21 @@ describe('OpenRouterClient.generate', () => {
     expect(modelsCalls).toHaveLength(1);
   });
 
+  it('без web_search не шлёт tools/provider и применяет свои temperature/max_tokens', async () => {
+    const fetchMock = makeFetchMock();
+    const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
+    await client.generate('план шоу', { temperature: 0.9, maxTokens: 800, webSearch: false });
+
+    const url = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/chat/completions'));
+    const init = url![1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.temperature).toBe(0.9);
+    expect(body.max_tokens).toBe(800);
+    expect(body.tools).toBeUndefined();
+    expect(body.provider).toBeUndefined();
+    expect(body.response_format).toEqual({ type: 'json_object' });
+  });
+
   it('мапит 401 на «неверный ключ»', async () => {
     const fetchMock = vi.fn(async () => new Response('unauthorized', { status: 401 }));
     const client = new OpenRouterClient({ apiKey: 'bad', model: 'm', fetchFn: fetchMock as unknown as typeof fetch });
@@ -162,6 +188,39 @@ describe('OpenRouterClient.generate', () => {
     const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
     const { rawText } = await client.generate('x');
     expect(rawText).toBe('[{"a":1}]');
+  });
+});
+
+describe('getOrCreateClient', () => {
+  it('возвращает один инстанс на пару ключ+модель', () => {
+    const a = getOrCreateClient('k1', 'm1');
+    const b = getOrCreateClient('k1', 'm1');
+    const otherModel = getOrCreateClient('k1', 'm2');
+    const otherKey = getOrCreateClient('k2', 'm1');
+    expect(a).toBe(b);
+    expect(a).not.toBe(otherModel);
+    expect(a).not.toBe(otherKey);
+  });
+
+  it('переиспользованный клиент не дёргает /models повторно', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/models')) {
+        return new Response(PRICING_BODY, { status: 200 });
+      }
+      return new Response(completionBody('[{"ok":true}]'), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = getOrCreateClient('shared-key', 'shared/model');
+    const second = getOrCreateClient('shared-key', 'shared/model');
+    await first.generate('a');
+    await second.generate('b');
+
+    const modelsCalls = fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/models'));
+    expect(modelsCalls).toHaveLength(1);
+
+    vi.unstubAllGlobals();
   });
 });
 
