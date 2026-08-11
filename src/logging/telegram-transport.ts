@@ -51,7 +51,8 @@ export class TelegramTransport extends Transport {
       }
 
       this.isSending = true;
-      const message = `[${info.level.toUpperCase()}] ${info.message}`;
+      const error = info.error !== undefined ? ` — ${String(info.error)}` : '';
+      const message = `[${info.level.toUpperCase()}] ${info.message}${error}`;
       const safe = message.length > this.maxLength
         ? `${message.slice(0, this.maxLength - 3)}...`
         : message;

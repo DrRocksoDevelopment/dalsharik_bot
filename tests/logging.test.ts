@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { TelegramTransport } from '../src/logging/telegram-transport.js';
+import { consoleFormat } from '../src/logging/logger.js';
 import { makeBotHarness, type BotHarness } from './helpers.js';
 
 const nextTick = () => new Promise<void>((r) => setImmediate(r));
@@ -80,5 +81,45 @@ describe('TelegramTransport', () => {
     await nextTick();
 
     expect(h.sendMessage).toHaveBeenCalledTimes(10);
+  });
+
+  it('включает описание ошибки в сообщение', async () => {
+    h = await makeBotHarness();
+    const transport = new TelegramTransport({ bot: h.bot, chatId: '-100123' });
+
+    await new Promise<void>((resolve) => {
+      transport.log({ level: 'error', message: 'Что-то сломалось', error: 'boom: timeout' }, () => resolve());
+    });
+    await nextTick();
+
+    expect(lastText(h)).toBe('[ERROR] Что-то сломалось — boom: timeout');
+  });
+});
+
+describe('console format', () => {
+  it('выводит описание ошибки и остальные метаданные', () => {
+    const out = consoleFormat.transform({
+      level: 'error',
+      message: 'AI-ведущий: ошибка, статичная карточка',
+      timestamp: '2026-08-11T17:39:28.792Z',
+      error: 'ECONNRESET',
+      chatId: '-100123',
+    } as never);
+    const text = (out && typeof out === 'object' ? out[Symbol.for('message')] : '') as string;
+
+    expect(text).toContain('AI-ведущий: ошибка, статичная карточка');
+    expect(text).toContain('ECONNRESET');
+    expect(text).toContain('chatId=-100123');
+  });
+
+  it('не добавляет суффикс без метаданных', () => {
+    const out = consoleFormat.transform({
+      level: 'info',
+      message: 'Scheduler запущен',
+      timestamp: '2026-08-11T17:39:28.792Z',
+    } as never);
+    const text = (out && typeof out === 'object' ? out[Symbol.for('message')] : '') as string;
+
+    expect(text).toBe('2026-08-11T17:39:28.792Z [info] Scheduler запущен');
   });
 });
