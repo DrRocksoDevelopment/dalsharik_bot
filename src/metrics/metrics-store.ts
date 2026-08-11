@@ -152,6 +152,8 @@ function ensureDefaults(s: StoredSnapshot): void {
   if (!s.ai) s.ai = { generate: emptyAiUsageMetrics(), host: emptyAiUsageMetrics() };
   if (!s.ai.generate) s.ai.generate = emptyAiUsageMetrics();
   if (!s.ai.host) s.ai.host = emptyAiUsageMetrics();
+  if (typeof s.ai.generate.total_cost_credits !== 'number') s.ai.generate.total_cost_credits = 0;
+  if (typeof s.ai.host.total_cost_credits !== 'number') s.ai.host.total_cost_credits = 0;
   for (const u of Object.values(s.users)) {
     if (typeof u.games_played !== 'number') {
       u.games_played = new Set(u.question_ids ?? []).size;
@@ -276,6 +278,7 @@ function aiUsageTotal(a: AiUsageMetrics, b: AiUsageMetrics): AiUsageMetrics {
     estimated_cost_usd: a.estimated_cost_usd + b.estimated_cost_usd,
     inference_cost_usd: a.inference_cost_usd + b.inference_cost_usd,
     search_cost_usd: a.search_cost_usd + b.search_cost_usd,
+    total_cost_credits: a.total_cost_credits + b.total_cost_credits,
   };
 }
 
@@ -405,6 +408,9 @@ export class JsonMetricsStore implements MetricsStore {
       bucket.estimated_cost_usd += input.estimatedCostUsd;
       bucket.inference_cost_usd += input.inferenceCostUsd;
       bucket.search_cost_usd += input.searchCostUsd;
+      if (typeof input.totalCostCredits === 'number' && Number.isFinite(input.totalCostCredits)) {
+        bucket.total_cost_credits += input.totalCostCredits;
+      }
     });
   }
 

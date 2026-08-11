@@ -119,20 +119,20 @@ export const MESSAGES = {
     ];
     if (m.ai.total.calls > 0) {
       lines.push('');
-      lines.push('🤖 AI-расход (оценка):');
+      lines.push('🤖 AI-расход:');
       if (m.ai.generate.calls > 0) {
         lines.push(
-          `• Генерация вопросов: ${m.ai.generate.calls} выз. · $${m.ai.generate.estimated_cost_usd.toFixed(4)}` +
+          `• Генерация вопросов: ${m.ai.generate.calls} выз. · ${aiCostLabel(m.ai.generate)}` +
             ` (токены ${m.ai.generate.total_tokens.toLocaleString('ru-RU')}, поиск ${m.ai.generate.web_search_requests})`,
         );
       }
       if (m.ai.host.calls > 0) {
         lines.push(
-          `• AI-ведущий: ${m.ai.host.calls} выз. · $${m.ai.host.estimated_cost_usd.toFixed(4)}` +
+          `• AI-ведущий: ${m.ai.host.calls} выз. · ${aiCostLabel(m.ai.host)}` +
             ` (токены ${m.ai.host.total_tokens.toLocaleString('ru-RU')})`,
         );
       }
-      lines.push(`• Итого: $${m.ai.total.estimated_cost_usd.toFixed(4)}`);
+      lines.push(`• Итого: ${aiCostLabel(m.ai.total)}`);
     }
     if (m.topChats.length > 0) {
       lines.push('');
@@ -399,6 +399,12 @@ export interface UsageSummary {
   searchCostUsd: number;
 }
 
+function aiCostLabel(m: { total_cost_credits: number; estimated_cost_usd: number }): string {
+  return m.total_cost_credits > 0
+    ? `$${m.total_cost_credits.toFixed(4)} (факт)`
+    : `$${m.estimated_cost_usd.toFixed(4)} (оценка)`;
+}
+
 export function formatUsage(u: UsageSummary): string {
   const inTokens = u.promptTokens.toLocaleString('ru-RU');
   const outTokens = u.completionTokens.toLocaleString('ru-RU');
@@ -406,12 +412,18 @@ export function formatUsage(u: UsageSummary): string {
     u.webSearchRequests > 0
       ? `• Web-поиск: ${u.webSearchRequests} запросов`
       : '• Web-поиск: не использовался';
+  const hasActual = typeof u.totalCostCredits === 'number' && Number.isFinite(u.totalCostCredits);
+  const costLine = hasActual
+    ? `💰 Стоимость: $${(u.totalCostCredits as number).toFixed(4)} (факт по счёту OpenRouter)`
+    : `💰 Стоимость: $${u.estimatedCostUsd.toFixed(4)} (оценка по прайс-листу)`;
+  const breakdownLine = hasActual
+    ? `   • оценка по прайс-листу: инференс $${u.inferenceCostUsd.toFixed(4)} · поиск $${u.searchCostUsd.toFixed(4)}`
+    : `   • инференс: $${u.inferenceCostUsd.toFixed(4)}\n   • поиск: $${u.searchCostUsd.toFixed(4)}`;
   return (
     `🧾 Потребление:\n` +
     `• Токены: ${inTokens} in / ${outTokens} out\n` +
     `${searchLine}\n` +
-    `💰 Стоимость: $${u.estimatedCostUsd.toFixed(4)} (включая поиск)\n` +
-    `   • инференс: $${u.inferenceCostUsd.toFixed(4)}\n` +
-    `   • поиск: $${u.searchCostUsd.toFixed(4)}`
+    `${costLine}\n` +
+    breakdownLine
   );
 }

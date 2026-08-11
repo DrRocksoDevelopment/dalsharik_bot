@@ -173,4 +173,86 @@ describe('metrics store', () => {
     expect(snap.users['1']!.last_seen).toBeNull();
     expect(snap.chats['-100123']!.rounds_count).toBe(0);
   });
+
+  it('recordAiUsage накапливает фактические стоимости и включает их в total', async () => {
+    const { metrics } = await makeStore();
+    const base = {
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      webSearchRequests: 0,
+      estimatedCostUsd: 0.001,
+      inferenceCostUsd: 0.001,
+      searchCostUsd: 0,
+    };
+    await metrics.recordAiUsage({ kind: 'generate', ...base, totalCostCredits: 0.0012 });
+    await metrics.recordAiUsage({ kind: 'generate', ...base, totalCostCredits: 0.0018 });
+    await metrics.recordAiUsage({ kind: 'host', ...base, totalCostCredits: 0.0005 });
+
+    const snap = await metrics.snapshot();
+    expect(snap.ai.generate.calls).toBe(2);
+    expect(snap.ai.generate.total_cost_credits).toBeCloseTo(0.003, 6);
+    expect(snap.ai.host.total_cost_credits).toBeCloseTo(0.0005, 6);
+    expect(snap.ai.total.total_cost_credits).toBeCloseTo(0.0035, 6);
+    expect(snap.ai.total.estimated_cost_usd).toBeCloseTo(0.003, 6);
+  });
+
+  it('recordAiUsage игнорирует отсутствующий факт и остаётся на оценке', async () => {
+    const { metrics } = await makeStore();
+    await metrics.recordAiUsage({
+      kind: 'generate',
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      webSearchRequests: 0,
+      estimatedCostUsd: 0.001,
+      inferenceCostUsd: 0.001,
+      searchCostUsd: 0,
+    });
+
+    const snap = await metrics.snapshot();
+    expect(snap.ai.generate.total_cost_credits).toBe(0);
+    expect(snap.ai.generate.estimated_cost_usd).toBeCloseTo(0.001, 6);
+  });
+
+  it('legacy ai-метрики без total_cost_credits читаются с нулями', async () => {
+    const { store, metrics } = await makeStore();
+    await store.store.metrics.mutate((items) => {
+      items.push({
+        id: 'global',
+        data: {
+          game: {},
+          users: {},
+          chats: {},
+          questions: {},
+          ai: {
+            generate: {
+              calls: 2,
+              prompt_tokens: 300,
+              completion_tokens: 150,
+              total_tokens: 450,
+              web_search_requests: 0,
+              estimated_cost_usd: 0.003,
+              inference_cost_usd: 0.003,
+              search_cost_usd: 0,
+            },
+            host: {
+              calls: 1,
+              prompt_tokens: 50,
+              completion_tokens: 25,
+              total_tokens: 75,
+              web_search_requests: 0,
+              estimated_cost_usd: 0.0005,
+              inference_cost_usd: 0.0005,
+              search_cost_usd: 0,
+            },
+          },
+        },
+      });
+    });
+    const snap = await metrics.snapshot();
+    expect(snap.ai.generate.total_cost_credits).toBe(0);
+    expect(snap.ai.host.total_cost_credits).toBe(0);
+    expect(snap.ai.generate.calls).toBe(2);
+  });
 });

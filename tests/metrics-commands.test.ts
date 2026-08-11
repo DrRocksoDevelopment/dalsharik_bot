@@ -95,4 +95,36 @@ describe('metrics-commands', () => {
     expect(text).toContain('Топ чатов по активности');
     expect(text).toContain('-100123');
   });
+
+  it('/metrics показывает факт и оценку AI-расхода', async () => {
+    h = await setup();
+    await metrics.recordAiUsage({
+      kind: 'generate',
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      webSearchRequests: 2,
+      estimatedCostUsd: 0.001,
+      inferenceCostUsd: 0.0005,
+      searchCostUsd: 0.0005,
+      totalCostCredits: 0.0009,
+    });
+    await metrics.recordAiUsage({
+      kind: 'host',
+      promptTokens: 40,
+      completionTokens: 20,
+      totalTokens: 60,
+      webSearchRequests: 0,
+      estimatedCostUsd: 0.0004,
+      inferenceCostUsd: 0.0004,
+      searchCostUsd: 0,
+    });
+
+    await h.bot.handleUpdate(commandUpdate('/metrics', { fromId: ADMIN_ID }));
+    const text = lastReply(h);
+    expect(text).toContain('🤖 AI-расход:');
+    expect(text).toContain('• Генерация вопросов: 1 выз. · $0.0009 (факт)');
+    expect(text).toContain('• AI-ведущий: 1 выз. · $0.0004 (оценка)');
+    expect(text).toContain('• Итого: $0.0009 (факт)');
+  });
 });
