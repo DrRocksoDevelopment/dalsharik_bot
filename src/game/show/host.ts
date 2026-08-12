@@ -29,6 +29,7 @@ export interface HostContext {
   streakHighlights?: StreakHighlight[];
   chatStreakRecord?: number | null;
   nextEventLocalTime?: string;
+  questionMessageId?: number;
 }
 
 export type ShowMode = 'ai' | 'static';
@@ -156,7 +157,7 @@ export class AiHost implements ShowHost {
         return 'static';
       }
 
-      await this.deps.streamer.stream(chatId, plan.lines);
+      await this.deps.streamer.stream(chatId, plan.lines, ctx.questionMessageId);
       return 'ai';
     } catch (err) {
       this.deps.logger.error('AI-ведущий: ошибка, статичная карточка', {

@@ -12,6 +12,7 @@ import { SloganEngine, type SloganContext } from '../content/slogans.js';
 import type { FinalizerSender } from '../telegram/finalizer-sender.js';
 import type { MetricsStore } from '../metrics/metrics.js';
 import { formatLocalTime } from '../utils/timezone.js';
+import { buildMessageLink } from '../utils/message-link.js';
 import { getOrCreateChat } from '../bot/chat-utils.js';
 import type { HostContext, ShowHost, ShowMode } from './show/host.js';
 
@@ -45,6 +46,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
     streakHighlights: { userId: string; currentStreak: number }[];
     chatStreakRecord: number | null;
     nextEventLocalTime?: string;
+    messageLink?: string;
   }): string {
     return buildResultsMessage({
       question: context.question,
@@ -60,12 +62,13 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       streakHighlights: context.streakHighlights,
       chatStreakRecord: context.chatStreakRecord,
       nextEventLocalTime: context.nextEventLocalTime,
+      messageLink: context.messageLink,
     });
   }
 
-  private async publish(chatId: string, message: string): Promise<void> {
+  private async publish(chatId: string, message: string, replyToMessageId?: number): Promise<void> {
     try {
-      await this.deps.sender.sendMessage(chatId, message);
+      await this.deps.sender.sendMessage(chatId, message, replyToMessageId);
     } catch (err) {
       this.deps.logger.error('Не удалось опубликовать итоги', {
         chatId,
@@ -148,12 +151,17 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       streakHighlights,
       chatStreakRecord,
       nextEventLocalTime,
+      questionMessageId: stored.messageId > 0 ? stored.messageId : undefined,
     };
+
+    const questionMessageId = stored.messageId > 0 ? stored.messageId : undefined;
+    const messageLink = buildMessageLink(stored.chatId, stored.messageId) ?? undefined;
 
     if (results.totalPlayers === 0) {
       await this.publish(
         stored.chatId,
-        buildEmptyResultsMessage({ question, nextEventLocalTime }),
+        buildEmptyResultsMessage({ question, nextEventLocalTime, messageLink }),
+        questionMessageId,
       );
     } else if (chat?.finalization === 'ai' && this.deps.host) {
       const mode: ShowMode = await this.deps.host.show(stored.chatId, hostCtx);
@@ -161,18 +169,21 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
         await sleep(this.deps.showCardDelayMs ?? DEFAULT_SHOW_CARD_DELAY_MS);
         await this.publish(
           stored.chatId,
-          buildShowSummaryMessage({ question, results, nextEventLocalTime }),
+          buildShowSummaryMessage({ question, results, nextEventLocalTime, messageLink }),
+          questionMessageId,
         );
       } else {
         await this.publish(
           stored.chatId,
-          this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime }),
+          this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime, messageLink }),
+          questionMessageId,
         );
       }
     } else {
       await this.publish(
         stored.chatId,
-        this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime }),
+        this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime, messageLink }),
+        questionMessageId,
       );
     }
 

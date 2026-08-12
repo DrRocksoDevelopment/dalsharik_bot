@@ -4,19 +4,23 @@ import type { Telegram } from 'telegraf';
 const DEFAULT_PAUSE_MS = 5000;
 
 export interface StreamSender {
-  sendMessage(chatId: string, text: string): Promise<number>;
+  sendMessage(chatId: string, text: string, replyToMessageId?: number): Promise<number>;
   editMessageText(chatId: string, messageId: number, text: string): Promise<void>;
 }
 
 export interface TextStreamer {
-  stream(chatId: string, chunks: readonly string[]): Promise<void>;
+  stream(chatId: string, chunks: readonly string[], replyToMessageId?: number): Promise<void>;
 }
 
 export class TelegramStreamSender implements StreamSender {
   constructor(private readonly telegram: Telegram) {}
 
-  async sendMessage(chatId: string, text: string): Promise<number> {
-    const message = await this.telegram.sendMessage(chatId, text);
+  async sendMessage(chatId: string, text: string, replyToMessageId?: number): Promise<number> {
+    const message = await this.telegram.sendMessage(chatId, text, {
+      reply_parameters: replyToMessageId
+        ? { message_id: replyToMessageId, allow_sending_without_reply: true }
+        : undefined,
+    });
     return message.message_id;
   }
 
@@ -38,13 +42,13 @@ export class EditTextStreamer implements TextStreamer {
     this.pauseMs = deps.pauseMs ?? DEFAULT_PAUSE_MS;
   }
 
-  async stream(chatId: string, chunks: readonly string[]): Promise<void> {
+  async stream(chatId: string, chunks: readonly string[], replyToMessageId?: number): Promise<void> {
     const lines = chunks.filter((c) => c.trim() !== '');
     if (lines.length === 0) return;
 
     let messageId: number;
     try {
-      messageId = await this.deps.sender.sendMessage(chatId, lines[0]!);
+      messageId = await this.deps.sender.sendMessage(chatId, lines[0]!, replyToMessageId);
     } catch (err) {
       this.deps.logger.error('Не удалось отправить стартовое сообщение ведущего', {
         chatId,
@@ -66,7 +70,7 @@ export class EditTextStreamer implements TextStreamer {
           error: err instanceof Error ? err.message : String(err),
         });
         try {
-          await this.deps.sender.sendMessage(chatId, lines.slice(i).join('\n'));
+          await this.deps.sender.sendMessage(chatId, lines.slice(i).join('\n'), replyToMessageId);
         } catch (sendErr) {
           this.deps.logger.error('Не удалось отправить остаток шоу', {
             chatId,

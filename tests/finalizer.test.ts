@@ -16,15 +16,16 @@ afterEach(async () => {
 });
 
 function makeSender() {
-  const calls = { close: 0, messages: 0, lastText: '' };
+  const calls = { close: 0, messages: 0, lastText: '', lastReplyTo: undefined as number | undefined };
   const sender: FinalizerSender = {
     async closePoll() {
       calls.close += 1;
       return 4;
     },
-    async sendMessage(_chatId, text) {
+    async sendMessage(_chatId, text, replyTo) {
       calls.messages += 1;
       calls.lastText = text;
+      calls.lastReplyTo = replyTo;
     },
   };
   return { sender, calls };
@@ -89,6 +90,63 @@ describe('finalizer', () => {
 
     const stored = await t.store.polls.get(poll.id);
     expect(stored?.status).toBe('completed');
+  });
+
+  it('прицепляет ссылку на сообщение с вопросом и шлёт итоги как реплай', async () => {
+    const t = await makeTempStore();
+    tempStores.push(t);
+    const question = makeQuestion();
+    const poll = makePoll({ chatId: '-1001234567890', messageId: 777 });
+    await t.store.questions.insert(question);
+    await t.store.polls.insert(poll);
+    await t.store.answers.insert({
+      id: 'telegram-poll-1:1',
+      userId: '1',
+      chatId: '-1001234567890',
+      questionId: 'event_000001',
+      telegramPollId: 'telegram-poll-1',
+      selectedOption: 'C',
+      isCorrect: true,
+      answeredAt: '2026-01-01T00:00:10.000Z',
+      reactionTimeMs: 10_000,
+      points: 3,
+      isRepeat: false,
+      updateId: 1,
+    });
+
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+    });
+
+    await finalizer.finalize(poll);
+
+    expect(calls.lastText).toContain('https://t.me/c/1234567890/777');
+    expect(calls.lastReplyTo).toBe(777);
+  });
+
+  it('в пустых итогах тоже есть ссылка на вопрос', async () => {
+    const t = await makeTempStore();
+    tempStores.push(t);
+    const question = makeQuestion();
+    const poll = makePoll();
+    await t.store.questions.insert(question);
+    await t.store.polls.insert(poll);
+
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+    });
+
+    await finalizer.finalize(poll);
+
+    expect(calls.lastText).toContain('🙊 Никто не ответил');
+    expect(calls.lastText).toContain('https://t.me/c/100123/42');
+    expect(calls.lastReplyTo).toBe(42);
   });
 
   it('использует свежую запись из хранилища при устаревшем объекте poll', async () => {
@@ -274,5 +332,20 @@ describe('results message', () => {
     expect(text).toContain('🔴 B — 0');
     expect(text).toContain('🟢 C — 0');
     expect(text).toContain('🔴 D — 0');
+  });
+
+  it('содержит ссылку на исходный вопрос при messageLink', () => {
+    const question = makeQuestion();
+    const results = calculateResults([]);
+
+    const text = buildResultsMessage({
+      question,
+      results,
+      users: new Map(),
+      slogan: '«История решила иначе.»',
+      messageLink: 'https://t.me/c/100123/42',
+    });
+
+    expect(text).toContain('🔗 Исходный вопрос: https://t.me/c/100123/42');
   });
 });
