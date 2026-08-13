@@ -352,6 +352,8 @@ export const MESSAGES = {
     if (failed > 0) text += ` Не удалось: ${failed}.`;
     return text;
   },
+  ratingPrompt: '🤔 Оцени этот вопрос:',
+  ratingSaved: (label: string) => `Спасибо! Оценка вопроса: ${label}`,
 } as const;
 
 const CATEGORY_LABELS: Record<string, string> = {

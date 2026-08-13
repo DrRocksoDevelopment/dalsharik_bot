@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { InlineKeyboardMarkup } from '@telegraf/types';
 import { DefaultQuestionFinalizer } from '../src/game/finalizer.js';
 import type { FinalizerSender } from '../src/telegram/finalizer-sender.js';
 import { buildResultsMessage } from '../src/content/results.js';
+import { MESSAGES } from '../src/content/messages.js';
 import { calculateResults } from '../src/game/stats.js';
 import { makeLogger, makePoll, makeQuestion, makeTempStore, type TempStore } from './helpers.js';
 import type { AnswerRecord } from '../src/game/answer.js';
@@ -16,16 +18,23 @@ afterEach(async () => {
 });
 
 function makeSender() {
-  const calls = { close: 0, messages: 0, lastText: '', lastReplyTo: undefined as number | undefined };
+  const calls = {
+    close: 0,
+    messages: 0,
+    lastText: '',
+    lastReplyTo: undefined as number | undefined,
+    lastMarkup: undefined as InlineKeyboardMarkup | undefined,
+  };
   const sender: FinalizerSender = {
     async closePoll() {
       calls.close += 1;
       return 4;
     },
-    async sendMessage(_chatId, text, replyTo) {
+    async sendMessage(_chatId, text, replyTo, markup) {
       calls.messages += 1;
       calls.lastText = text;
       calls.lastReplyTo = replyTo;
+      calls.lastMarkup = markup;
     },
   };
   return { sender, calls };
@@ -218,6 +227,47 @@ describe('finalizer', () => {
 
     expect(calls.lastText).not.toContain('NaN');
     expect(calls.lastText).toContain('⏭ Следующее событие');
+  });
+
+  it('прицепляет кнопки оценки к карточке итогов', async () => {
+    const t = await makeTempStore();
+    tempStores.push(t);
+    const question = makeQuestion();
+    const poll = makePoll();
+    await t.store.questions.insert(question);
+    await t.store.polls.insert(poll);
+    await t.store.answers.insert({
+      id: 'telegram-poll-1:1',
+      userId: '1',
+      chatId: '-100123',
+      questionId: 'event_000001',
+      telegramPollId: 'telegram-poll-1',
+      selectedOption: 'C',
+      isCorrect: true,
+      answeredAt: '2026-01-01T00:00:10.000Z',
+      reactionTimeMs: 10_000,
+      points: 3,
+      isRepeat: false,
+      updateId: 1,
+    });
+
+    const markup: InlineKeyboardMarkup = {
+      inline_keyboard: [
+        [{ text: '👍 Хорошо (0)', callback_data: 'rate:good:event_000001' }],
+      ],
+    };
+    const { sender, calls } = makeSender();
+    const finalizer = new DefaultQuestionFinalizer({
+      logger: makeLogger(),
+      store: t.store,
+      sender,
+      ratingKeyboard: () => markup,
+    });
+
+    await finalizer.finalize(poll);
+
+    expect(calls.lastMarkup).toEqual(markup);
+    expect(calls.lastText).toContain(MESSAGES.ratingPrompt);
   });
 });
 
