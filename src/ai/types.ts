@@ -10,6 +10,8 @@ export interface AiSettingsRecord {
   generateModel?: string | null;
   hostPrompt?: string;
   generatePrompt?: string;
+  firecrawlApiKey?: string | null;
+  firecrawlBaseUrl?: string | null;
   updatedAt: string;
 }
 

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registerAiCommands, parseGenerateArgs } from '../src/bot/ai-commands.js';
 import { OpenRouterError, type OpenRouterClient } from '../src/ai/openrouter-client.js';
+import type { FirecrawlClient, FactPage } from '../src/ai/firecrawl-client.js';
 import type { GenerationUsage } from '../src/ai/types.js';
 import { AI_SETTINGS_ID } from '../src/ai/types.js';
 import { DEFAULT_HOST_PROMPT } from '../src/game/show/host.js';
@@ -31,7 +32,10 @@ function lastReply(h: BotHarness): string {
 interface SetupOptions {
   envApiKey?: string | null;
   envModel?: string | null;
+  envFirecrawlApiKey?: string | null;
+  envFirecrawlBaseUrl?: string | null;
   createClient?: (apiKey: string, model: string) => OpenRouterClient;
+  firecrawlPages?: FactPage[];
 }
 
 describe('parseGenerateArgs', () => {
@@ -87,6 +91,9 @@ describe('registerAiCommands', () => {
       engine,
       dataDir: t.dir,
     });
+    const firecrawlPages = opts.firecrawlPages ?? [
+      { title: 'Тема', url: 'https://example.com', markdown: 'Факты о событии.' },
+    ];
     registerAiCommands(h.bot, {
       logger: makeLogger(),
       adminId: ADMIN_ID,
@@ -94,7 +101,14 @@ describe('registerAiCommands', () => {
       reloader,
       envApiKey: opts.envApiKey ?? null,
       envModel: opts.envModel ?? null,
+      envFirecrawlApiKey: opts.envFirecrawlApiKey ?? null,
+      envFirecrawlBaseUrl: opts.envFirecrawlBaseUrl ?? null,
       createClient: opts.createClient,
+      createFirecrawlClient: () => ({
+        mode: 'local',
+        baseUrl: 'http://localhost:3002',
+        search: vi.fn(async () => firecrawlPages),
+      }) as unknown as FirecrawlClient,
     });
     return { reloader };
   }
@@ -116,9 +130,16 @@ describe('registerAiCommands', () => {
     return JSON.stringify([makeQuestion()]);
   }
 
+  function validRawTopics(): string {
+    return JSON.stringify({ topics: [{ title: 'Тема', query: 'историческое событие' }] });
+  }
+
   function stubClient(rawText = validRawQuestions()) {
     return {
-      generate: vi.fn().mockResolvedValue({ rawText, usage: USAGE }),
+      generate: vi
+        .fn()
+        .mockResolvedValueOnce({ rawText: validRawTopics(), usage: USAGE })
+        .mockResolvedValueOnce({ rawText, usage: USAGE }),
     } as unknown as OpenRouterClient;
   }
 
@@ -274,7 +295,7 @@ describe('registerAiCommands', () => {
 
     await h.bot.handleUpdate(privateHelp('/generate 1 history'));
 
-    const prompt = vi.mocked(client.generate).mock.calls[0]![0];
+    const prompt = vi.mocked(client.generate).mock.calls[1]![0];
     expect(prompt).toContain('Вопросы только про море');
     expect(prompt).toContain('1 новых вопросов');
     expect(prompt).not.toContain(DEFAULT_GENERATION_PROMPT);
@@ -287,7 +308,7 @@ describe('registerAiCommands', () => {
 
     await h.bot.handleUpdate(privateHelp('/generate 1 history'));
 
-    const prompt = vi.mocked(client.generate).mock.calls[0]![0];
+    const prompt = vi.mocked(client.generate).mock.calls[1]![0];
     expect(prompt).toContain('Ты — генератор вопросов для Telegram-викторины');
   });
 
@@ -328,6 +349,102 @@ describe('registerAiCommands', () => {
     expect(text).toContain('из .env');
   });
 
+  it('/ai_status показывает Firecrawl по умолчанию (локальный)', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/ai_status'));
+    const text = lastReply(h);
+    expect(text).toContain('Firecrawl: локально (http://localhost:3002)');
+    expect(text).toContain('не задан');
+  });
+
+  it('/ai_status показывает сохранённый ключ Firecrawl и облачный режим', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_firecrawl_key fc-cloud-secret'));
+    await h.bot.handleUpdate(privateHelp('/ai_status'));
+    const text = lastReply(h);
+    expect(text).toContain('Firecrawl: облако (ключ fc-clo');
+  });
+
+  it('/ai_status показывает Firecrawl из env', async () => {
+    await setup({ envFirecrawlApiKey: 'fc-env-secret-123', envFirecrawlBaseUrl: 'https://fc.example.com' });
+    await h.bot.handleUpdate(privateHelp('/ai_status'));
+    const text = lastReply(h);
+    expect(text).toContain('Firecrawl: облако (ключ fc-env');
+    expect(text).toContain('из .env');
+  });
+
+  it('/set_firecrawl_key сохраняет ключ и переводит в облачный режим', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_firecrawl_key fc-cloud-secret'));
+    expect(lastReply(h)).toBe(MESSAGES.firecrawlKeySet);
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.firecrawlApiKey).toBe('fc-cloud-secret');
+  });
+
+  it('/set_firecrawl_key требует ключ', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/set_firecrawl_key'));
+    expect(lastReply(h)).toContain('/set_firecrawl_key');
+  });
+
+  it('/reset_firecrawl_key удаляет ключ', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_firecrawl_key fc-cloud-secret'));
+    await h.bot.handleUpdate(privateHelp('/reset_firecrawl_key'));
+    expect(lastReply(h)).toBe(MESSAGES.firecrawlKeyReset);
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.firecrawlApiKey).toBeUndefined();
+  });
+
+  it('/set_firecrawl_url сохраняет адрес', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_firecrawl_url http://localhost:3002'));
+    expect(lastReply(h)).toBe(MESSAGES.firecrawlUrlSet('http://localhost:3002'));
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.firecrawlBaseUrl).toBe(
+      'http://localhost:3002',
+    );
+  });
+
+  it('/set_firecrawl_url требует адрес', async () => {
+    await setup();
+    await h.bot.handleUpdate(privateHelp('/set_firecrawl_url'));
+    expect(lastReply(h)).toContain('/set_firecrawl_url');
+  });
+
+  it('/reset_firecrawl_url удаляет адрес', async () => {
+    await setup();
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+    await h.bot.handleUpdate(privateHelp('/set_firecrawl_url http://localhost:3002'));
+    await h.bot.handleUpdate(privateHelp('/reset_firecrawl_url'));
+    expect(lastReply(h)).toBe(MESSAGES.firecrawlUrlReset);
+    expect((await t.store.aiSettings.get(AI_SETTINGS_ID))?.firecrawlBaseUrl).toBeUndefined();
+  });
+
+  it('/generate при пустом факт-бейзе сообщает про Firecrawl', async () => {
+    const client = stubClient();
+    await setup({ createClient: () => client, firecrawlPages: [] });
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+
+    await h.bot.handleUpdate(privateHelp('/generate'));
+
+    expect(lastReply(h)).toContain('Firecrawl');
+    expect(await t.store.pendingQuestions.getAll()).toHaveLength(0);
+  });
+
+  it('/generate генерирует с факт-бейзом', async () => {
+    const client = stubClient();
+    await setup({ createClient: () => client });
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+
+    await h.bot.handleUpdate(privateHelp('/generate'));
+
+    const prompt = vi.mocked(client.generate).mock.calls[1]![0];
+    expect(prompt).toContain('FACT BASE');
+    expect(prompt).toContain('https://example.com');
+  });
+
   it('/generate отклоняет не-админа', async () => {
     await setup();
     await h.bot.handleUpdate(commandUpdate('/generate', { fromId: 999, chatId: 999, chatType: 'private' }));
@@ -365,7 +482,7 @@ describe('registerAiCommands', () => {
 
     await h.bot.handleUpdate(privateHelp('/generate 1 history'));
 
-    expect(client.generate).toHaveBeenCalledTimes(1);
+    expect(client.generate).toHaveBeenCalledTimes(2);
     const pending = await t.store.pendingQuestions.getAll();
     expect(pending).toHaveLength(1);
     expect(pending[0]!.category).toBe('history');
@@ -375,18 +492,25 @@ describe('registerAiCommands', () => {
   });
 
   it('/generate отчёт показывает факт по счёту, когда usage.cost есть', async () => {
-    const client = stubClient();
-    vi.mocked(client.generate).mockResolvedValue({
-      rawText: validRawQuestions(),
-      usage: { ...USAGE, totalCostCredits: 0.00234 },
-    });
+    const client = {
+      generate: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rawText: validRawTopics(),
+          usage: { ...USAGE, totalCostCredits: 0.001 },
+        })
+        .mockResolvedValueOnce({
+          rawText: validRawQuestions(),
+          usage: { ...USAGE, totalCostCredits: 0.00234 },
+        }),
+    } as unknown as OpenRouterClient;
     await setup({ createClient: () => client });
     await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
 
     await h.bot.handleUpdate(privateHelp('/generate 1'));
 
     const text = lastReply(h);
-    expect(text).toContain('$0.0023 (факт по счёту OpenRouter)');
+    expect(text).toContain('$0.0033 (факт по счёту OpenRouter)');
     expect(text).not.toContain('(оценка по прайс-листу)');
   });
 
@@ -398,7 +522,7 @@ describe('registerAiCommands', () => {
     await h.bot.handleUpdate(privateHelp('/generate 1'));
 
     const text = lastReply(h);
-    expect(text).toContain('$0.0010 (оценка по прайс-листу)');
+    expect(text).toContain('$0.0020 (оценка по прайс-листу)');
     expect(text).not.toContain('(факт по счёту OpenRouter)');
   });
 

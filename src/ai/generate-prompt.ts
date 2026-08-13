@@ -5,6 +5,7 @@ export interface BuildGenerationPromptOptions {
   count: number;
   category: Category | null;
   existingTexts: string[];
+  factBase?: string;
 }
 
 export const DEFAULT_GENERATION_PROMPT = `Ты — генератор вопросов для Telegram-викторины «Что было дальше?» (Dalsharik). Твоя задача — создавать новые вопросы по реальным событиям.
@@ -50,9 +51,11 @@ export const DEFAULT_GENERATION_PROMPT = `Ты — генератор вопро
 - explanation: 2–4 предложения с фактами и датами, почему верен ответ.
 - sources: 1–2 реальных URL.
 
-## Обязательно используй инструмент web search
+## Источники фактов
 
-Перед тем как писать вопрос, выполняй поиск в вебе (инструмент web_search):
+Если в запросе есть блок ## FACT BASE — создавай вопросы ТОЛЬКО на основе фактов из него, а ссылки в sources бери строго из URL этого блока. НЕ выполняй поиск в вебе и не добавляй факты сверх блока.
+
+Если блока ## FACT BASE нет — перед тем как писать вопрос, выполняй поиск в вебе (инструмент web_search):
 1. Подтверди факты события и его продолжение по реальным источникам.
 2. Возьми реальные, доступные URL источников ТОЛЬКО из результатов поиска (Wikipedia, Britannica, NASA, музеи, новостные сайты и т.п.).
 3. Никогда не выдумывай источники. Каждая ссылка в sources должна реально существовать и поддерживать объяснение.
@@ -92,9 +95,10 @@ export function buildGenerationPrompt(
           .map((t) => `- ${t}`)
           .join('\n')}`
       : '';
+  const factBase = opts.factBase ? `\n\n${opts.factBase}` : '';
 
   return `${instruction}
 
 ${categoryLine}
-${countLine}${blacklist}`;
+${countLine}${blacklist}${factBase}`;
 }
