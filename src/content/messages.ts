@@ -241,6 +241,10 @@ export const MESSAGES = {
     keyMasked: string | null;
     keyFromEnv: boolean;
     hostPromptSet: boolean;
+    firecrawlMode: 'cloud' | 'local';
+    firecrawlBaseUrl: string;
+    firecrawlKeyMasked: string | null;
+    firecrawlKeyFromEnv: boolean;
   }) => {
     const keyLine = s.keyMasked
       ? `• Ключ: ${s.keyMasked}${s.keyFromEnv ? ' (из .env)' : ''}`
@@ -252,11 +256,23 @@ export const MESSAGES = {
     const hostPromptLine = s.hostPromptSet
       ? '• Промпт ведущего: кастомный'
       : '• Промпт ведущего: стандартный';
-    return `🤖 ИИ-генерация вопросов (OpenRouter)\n${modelLine}\n${generateModelLine}\n${keyLine}\n${hostPromptLine}\n\nСменить ключ: /set_ai_key <ключ>\nСменить модель: /set_ai_model <модель>\nМодель генерации: /set_generate_model <модель>, сброс: /reset_generate_model\nПромпт ведущего: /set_host_prompt <текст>, сброс: /reset_host_prompt\nСгенерировать: /generate [кол-во] [категория]`;
+    const firecrawlLine =
+      s.firecrawlMode === 'cloud'
+        ? `• Firecrawl: облако (ключ ${s.firecrawlKeyMasked}${s.firecrawlKeyFromEnv ? ' из .env' : ''})`
+        : `• Firecrawl: локально (${s.firecrawlBaseUrl})`;
+    return `🤖 ИИ-генерация вопросов (OpenRouter)\n${modelLine}\n${generateModelLine}\n${keyLine}\n${firecrawlLine}\n${hostPromptLine}\n\nСменить ключ: /set_ai_key <ключ>\nСменить модель: /set_ai_model <модель>\nМодель генерации: /set_generate_model <модель>, сброс: /reset_generate_model\nFirecrawl: /set_firecrawl_key <ключ>, отзыв: /reset_firecrawl_key; адрес: /set_firecrawl_url <url>, сброс: /reset_firecrawl_url\nПромпт ведущего: /set_host_prompt <текст>, сброс: /reset_host_prompt\nСгенерировать: /generate [кол-во] [категория]`;
   },
   generateModelSet: (model: string) =>
     `🤖 Модель генерации сохранена: ${model}\nСброс к основной модели: /reset_generate_model`,
   generateModelReset: '🤖 Модель генерации сброшена — используется основная (/set_ai_model).',
+  firecrawlKeySet:
+    '🔥 Ключ Firecrawl сохранён — факт-поиск идёт через облако api.firecrawl.dev.\nОтзыв ключа (переключение на локальный инстанс): /reset_firecrawl_key',
+  firecrawlKeyReset:
+    '🔥 Ключ Firecrawl отозван — факт-поиск идёт через локальный инстанс (адрес: /set_firecrawl_url, по умолчанию http://localhost:3002).',
+  firecrawlUrlSet: (url: string) =>
+    `🔥 Адрес локального Firecrawl сохранён: ${url}\nСброс: /reset_firecrawl_url`,
+  firecrawlUrlReset:
+    '🔥 Адрес локального Firecrawl сброшен — используется значение из .env или http://localhost:3002.',
   hostPromptSet:
     '🎤 Кастомная инструкция ведущему сохранена.\nСброс к стандартной: /reset_host_prompt',
   hostPromptReset: '🎤 Кастомная инструкция ведущему сброшена — используется стандартная.',
@@ -277,7 +293,7 @@ export const MESSAGES = {
   hostPromptTooLong: (max: number) =>
     `❌ Инструкция слишком длинная (максимум ${max} символов).`,
   aiGenerateStarted: (count: number, category: string) =>
-    `🤖 Генерирую ${count} вопросов${category}…\nПроверяю факты и источники через web-поиск.\nЭто может занять 30–120 секунд.`,
+    `🤖 Генерирую ${count} вопросов${category}…\nПодбираю темы, проверяю факты и источники через Firecrawl.\nЭто может занять 30–120 секунд.`,
   aiGenerateError: (reason: string, usage: UsageSummary | null) => {
     const cost = usage ? `\n\n${formatUsage(usage)}` : '';
     return `❌ Ошибка генерации: ${reason}${cost}`;

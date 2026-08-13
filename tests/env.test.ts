@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadEnv } from '../src/config/env.js';
 
-const ENV_KEYS = ['BOT_TOKEN', 'LOG_LEVEL', 'LOG_CHAT_ID', 'LOG_FILE', 'DATA_DIR', 'BOT_ADMIN_ID', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL'];
+const ENV_KEYS = ['BOT_TOKEN', 'LOG_LEVEL', 'LOG_CHAT_ID', 'LOG_FILE', 'DATA_DIR', 'BOT_ADMIN_ID', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'FIRECRAWL_API_KEY', 'FIRECRAWL_BASE_URL'];
 
 const saved: Record<string, string | undefined> = {};
 
@@ -37,6 +37,8 @@ describe('loadEnv', () => {
       BOT_ADMIN_ID: '42',
       OPENROUTER_API_KEY: 'sk-or-test',
       OPENROUTER_MODEL: 'openrouter/auto',
+      FIRECRAWL_API_KEY: 'fc-test',
+      FIRECRAWL_BASE_URL: 'http://localhost:3002',
     })) {
       process.env[name] = value;
     }
@@ -49,6 +51,8 @@ describe('loadEnv', () => {
       botAdminId: 42,
       openrouterApiKey: 'sk-or-test',
       openrouterModel: 'openrouter/auto',
+      firecrawlApiKey: 'fc-test',
+      firecrawlBaseUrl: 'http://localhost:3002',
     });
   });
 
@@ -64,6 +68,8 @@ describe('loadEnv', () => {
       botAdminId: null,
       openrouterApiKey: null,
       openrouterModel: null,
+      firecrawlApiKey: null,
+      firecrawlBaseUrl: 'http://localhost:3002',
     });
   });
 

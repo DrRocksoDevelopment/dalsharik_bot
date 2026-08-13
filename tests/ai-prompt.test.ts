@@ -52,4 +52,32 @@ describe('buildGenerationPrompt', () => {
     expect(prompt).toContain('Вопрос про Марс');
     expect(prompt).toContain('Наука (science)');
   });
+
+  it('с factBase вставляет блок фактов', () => {
+    const factBase = '## FACT BASE\n\n### Аполлон-11\nURL: https://ru.wikipedia.org/wiki/Аполлон-11\n\nПолетели в 1969.';
+    const prompt = buildGenerationPrompt({
+      count: 3,
+      category: null,
+      existingTexts: [],
+      factBase,
+    });
+    expect(prompt).toContain(factBase);
+    expect(prompt).toContain('## FACT BASE');
+  });
+
+  it('без factBase не вставляет блок фактов', () => {
+    const custom = 'Ты — генератор вопросов.';
+    const prompt = buildGenerationPrompt({ count: 3, category: null, existingTexts: [] }, custom);
+    expect(prompt).not.toContain('## FACT BASE');
+  });
+
+  it('кастомная инструкция с factBase вставляет блок', () => {
+    const custom = 'Ты — генератор вопросов.';
+    const factBase = '## FACT BASE\n\n### Аполлон-11\nURL: https://ru.wikipedia.org/wiki/Аполлон-11\n\nПолетели в 1969.';
+    const prompt = buildGenerationPrompt(
+      { count: 3, category: null, existingTexts: [], factBase },
+      custom,
+    );
+    expect(prompt).toContain(factBase);
+  });
 });

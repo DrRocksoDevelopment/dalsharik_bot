@@ -130,6 +130,8 @@ export async function main(): Promise<void> {
     metrics,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
+    envFirecrawlApiKey: env.firecrawlApiKey,
+    envFirecrawlBaseUrl: env.firecrawlBaseUrl,
   });
 
   registerBroadcastCommand(bot, {

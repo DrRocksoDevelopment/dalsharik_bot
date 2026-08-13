@@ -9,6 +9,8 @@ export interface EnvConfig {
   botAdminId: number | null;
   openrouterApiKey: string | null;
   openrouterModel: string | null;
+  firecrawlApiKey: string | null;
+  firecrawlBaseUrl: string;
 }
 
 function required(name: string): string {
@@ -39,5 +41,7 @@ export function loadEnv(): EnvConfig {
       : null,
     openrouterApiKey: optional('OPENROUTER_API_KEY'),
     openrouterModel: optional('OPENROUTER_MODEL'),
+    firecrawlApiKey: optional('FIRECRAWL_API_KEY'),
+    firecrawlBaseUrl: process.env.FIRECRAWL_BASE_URL?.trim() || 'http://localhost:3002',
   };
 }
