@@ -1,4 +1,5 @@
 import type { Logger } from 'winston';
+import type { InlineKeyboardMarkup } from '@telegraf/types';
 import type { DataStore } from '../storage/data-store.js';
 import { DEFAULT_CONFIG } from '../config/config.js';
 import type { PollRecord } from './poll.js';
@@ -14,6 +15,7 @@ import type { MetricsStore } from '../metrics/metrics.js';
 import { formatLocalTime } from '../utils/timezone.js';
 import { buildMessageLink } from '../utils/message-link.js';
 import { getOrCreateChat } from '../bot/chat-utils.js';
+import { MESSAGES } from '../content/messages.js';
 import type { HostContext, ShowHost, ShowMode } from './show/host.js';
 
 const STREAK_HIGHLIGHT_MIN = 2;
@@ -28,6 +30,7 @@ export interface QuestionFinalizerDeps {
   host?: ShowHost;
   now?: () => number;
   showCardDelayMs?: number;
+  ratingKeyboard?: (questionId: string) => InlineKeyboardMarkup;
 }
 
 export interface QuestionFinalizer {
@@ -66,15 +69,24 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
     });
   }
 
-  private async publish(chatId: string, message: string, replyToMessageId?: number): Promise<void> {
+  private async publish(
+    chatId: string,
+    message: string,
+    replyToMessageId?: number,
+    replyMarkup?: InlineKeyboardMarkup,
+  ): Promise<void> {
     try {
-      await this.deps.sender.sendMessage(chatId, message, replyToMessageId);
+      await this.deps.sender.sendMessage(chatId, message, replyToMessageId, replyMarkup);
     } catch (err) {
       this.deps.logger.error('Не удалось опубликовать итоги', {
         chatId,
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  private withRatingPrompt(message: string, replyMarkup?: InlineKeyboardMarkup): string {
+    return replyMarkup ? `${message}\n\n${MESSAGES.ratingPrompt}` : message;
   }
 
   async finalize(poll: PollRecord): Promise<void> {
@@ -156,12 +168,17 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
 
     const questionMessageId = stored.messageId > 0 ? stored.messageId : undefined;
     const messageLink = buildMessageLink(stored.chatId, stored.messageId) ?? undefined;
+    const ratingMarkup = this.deps.ratingKeyboard?.(stored.questionId);
 
     if (results.totalPlayers === 0) {
       await this.publish(
         stored.chatId,
-        buildEmptyResultsMessage({ question, nextEventLocalTime, messageLink }),
+        this.withRatingPrompt(
+          buildEmptyResultsMessage({ question, nextEventLocalTime, messageLink }),
+          ratingMarkup,
+        ),
         questionMessageId,
+        ratingMarkup,
       );
     } else if (chat?.finalization === 'ai' && this.deps.host) {
       const mode: ShowMode = await this.deps.host.show(stored.chatId, hostCtx);
@@ -169,21 +186,33 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
         await sleep(this.deps.showCardDelayMs ?? DEFAULT_SHOW_CARD_DELAY_MS);
         await this.publish(
           stored.chatId,
-          buildShowSummaryMessage({ question, results, nextEventLocalTime, messageLink }),
+          this.withRatingPrompt(
+            buildShowSummaryMessage({ question, results, nextEventLocalTime, messageLink }),
+            ratingMarkup,
+          ),
           questionMessageId,
+          ratingMarkup,
         );
       } else {
         await this.publish(
           stored.chatId,
-          this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime, messageLink }),
+          this.withRatingPrompt(
+            this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime, messageLink }),
+            ratingMarkup,
+          ),
           questionMessageId,
+          ratingMarkup,
         );
       }
     } else {
       await this.publish(
         stored.chatId,
-        this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime, messageLink }),
+        this.withRatingPrompt(
+          this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime, messageLink }),
+          ratingMarkup,
+        ),
         questionMessageId,
+        ratingMarkup,
       );
     }
 
