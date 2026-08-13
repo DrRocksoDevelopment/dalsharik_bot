@@ -455,6 +455,7 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
         webSearch: false,
         jsonObject: true,
         maxTokens: TOPICS_MAX_TOKENS,
+        reasoning: { effort: 'low' },
       });
       const topics = parseTopics(topicsResult.rawText);
       if (!topics.ok) {
@@ -490,6 +491,7 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
       const { rawText, usage } = await client.generate(prompt, {
         webSearch: false,
         jsonObject: true,
+        reasoning: { effort: 'low' },
       });
       const combinedUsage = sumUsage(topicsResult.usage, {
         ...usage,

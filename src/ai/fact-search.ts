@@ -38,7 +38,7 @@ export function buildTopicsPrompt(opts: {
   category: Category | null;
   existingTexts: string[];
 }): string {
-  const topicsCount = Math.min(opts.count + 5, MAX_TOPICS);
+  const topicsCount = Math.min(opts.count, MAX_TOPICS);
   const categoryLine = opts.category
     ? `Категория: ${categoryLabel(opts.category)} (${opts.category})`
     : `Категории: смешай все — ${['history', 'science', 'technology', 'culture', 'geography']
@@ -58,17 +58,233 @@ ${categoryLine}
 Предложи ${topicsCount} тем.${blacklist}`;
 }
 
+function normalizeQuotes(text: string): string {
+  let out = '';
+  let inDouble = false;
+  let inSingle = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inDouble) {
+      out += c;
+      if (c === '\\' && text[i + 1] !== undefined) {
+        out += text[i + 1]!;
+        i += 1;
+        continue;
+      }
+      if (c === '"') inDouble = false;
+      continue;
+    }
+    if (inSingle) {
+      if (c === '\\' && text[i + 1] !== undefined) {
+        out += c + text[i + 1]!;
+        i += 1;
+        continue;
+      }
+      if (c === "'") {
+        out += '"';
+        inSingle = false;
+        continue;
+      }
+      if (c === '"') {
+        out += '\\"';
+        continue;
+      }
+      out += c;
+      continue;
+    }
+    if (c === '"') {
+      inDouble = true;
+      out += c;
+      continue;
+    }
+    if (c === "'") {
+      inSingle = true;
+      out += '"';
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
+
+function quoteKeys(text: string): string {
+  let out = '';
+  let inStr = false;
+  let pendingKey = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inStr) {
+      out += c;
+      if (c === '\\' && text[i + 1] !== undefined) {
+        out += text[i + 1]!;
+        i += 1;
+        continue;
+      }
+      if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') {
+      inStr = true;
+      out += c;
+      pendingKey = false;
+      continue;
+    }
+    if (c === '{' || c === ',' || c === '[') {
+      out += c;
+      pendingKey = c !== '[';
+      continue;
+    }
+    if (c === '}' || c === ']') {
+      out += c;
+      pendingKey = false;
+      continue;
+    }
+    if (pendingKey) {
+      if (c === ':') {
+        out += c;
+        pendingKey = false;
+        continue;
+      }
+      if (c === ' ' || c === '\n' || c === '\t' || c === '\r') {
+        out += c;
+        continue;
+      }
+      let j = i;
+      let key = '';
+      while (j < text.length) {
+        const k = text[j]!;
+        if (k === ':' || k === '{' || k === '}' || k === '[' || k === ']' || k === ',') break;
+        key += k;
+        j += 1;
+      }
+      if (j < text.length && text[j] === ':') {
+        out += '"' + key.trim() + '"' + text[j];
+        i = j;
+        pendingKey = false;
+        continue;
+      }
+      out += c;
+      pendingKey = false;
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
+
+function removeTrailingCommas(text: string): string {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inStr) {
+      out += c;
+      if (c === '\\' && text[i + 1] !== undefined) {
+        out += text[i + 1]!;
+        i += 1;
+        continue;
+      }
+      if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') {
+      inStr = true;
+      out += c;
+      continue;
+    }
+    if (c === ',') {
+      let j = i + 1;
+      while (j < text.length && /\s/.test(text[j]!)) j += 1;
+      if (text[j] === '}' || text[j] === ']') continue;
+    }
+    out += c;
+  }
+  return out;
+}
+
+function balanceClose(text: string): string {
+  const stack: string[] = [];
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inStr) {
+      if (c === '\\') {
+        i += 1;
+        continue;
+      }
+      if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{') stack.push('}');
+    else if (c === '[') stack.push(']');
+    else if (c === '}') stack.pop();
+    else if (c === ']') stack.pop();
+  }
+  return stack.reverse().join('');
+}
+
+function tryParseClosed(text: string): unknown | null {
+  const closers: number[] = [];
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inStr) {
+      if (c === '\\') {
+        i += 1;
+        continue;
+      }
+      if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '}' || c === ']') closers.push(i);
+  }
+  for (const pos of closers.reverse()) {
+    const candidate = text.slice(0, pos + 1);
+    try {
+      return JSON.parse(candidate + balanceClose(candidate));
+    } catch {
+      // пробуем обрезать раньше
+    }
+  }
+  return null;
+}
+
+function tryParse(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    // невалидный как есть — пробуем починить
+  }
+  const candidates = [
+    normalizeQuotes(text),
+    quoteKeys(normalizeQuotes(text)),
+    removeTrailingCommas(quoteKeys(normalizeQuotes(text))),
+  ];
+  for (const c of candidates) {
+    try {
+      return JSON.parse(c);
+    } catch {
+      // пробуем следующий кандидат
+    }
+  }
+  for (const c of candidates) {
+    const recovered = tryParseClosed(c);
+    if (recovered !== null) return recovered;
+  }
+  return null;
+}
+
 export function parseTopics(
   text: string,
 ): { ok: true; topics: TopicCandidate[] } | { ok: false; reason: string } {
   const trimmed = text.trim().replace(/^\uFEFF/, '');
   const fenced = /^```(?:json)?\s*([\s\S]*?)```\s*$/.exec(trimmed);
   const jsonText = fenced ? fenced[1]!.trim() : trimmed;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (err) {
-    return { ok: false, reason: `невалидный JSON тем: ${err instanceof Error ? err.message : String(err)}` };
+  const parsed = tryParse(jsonText);
+  if (parsed === null) {
+    return { ok: false, reason: 'невалидный JSON тем' };
   }
   const list = Array.isArray(parsed)
     ? parsed

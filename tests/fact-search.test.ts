@@ -3,9 +3,9 @@ import { buildTopicsPrompt, parseTopics, searchFactPages } from '../src/ai/fact-
 import type { FirecrawlClient, FactPage } from '../src/ai/firecrawl-client.js';
 
 describe('buildTopicsPrompt', () => {
-  it('предлагает count+5 тем', () => {
+  it('предлагает ровно столько тем, сколько запрошено', () => {
     const prompt = buildTopicsPrompt({ count: 5, category: 'history', existingTexts: [] });
-    expect(prompt).toContain('Предложи 10 тем');
+    expect(prompt).toContain('Предложи 5 тем');
     expect(prompt).toContain('История (history)');
   });
 
@@ -57,6 +57,48 @@ describe('parseTopics', () => {
   it('пустые поля отбрасываются, пустой результат → причина', () => {
     const res = parseTopics('{"topics":[{"title":"","query":""}]}');
     expect(res).toEqual({ ok: false, reason: 'нет валидных тем' });
+  });
+
+  it('восстанавливает JSON с одинарными кавычками', () => {
+    const res = parseTopics(
+      "{'topics':[{'title':'Аполлон-11','query':'высадка на Луну 1969'},{'title':'Падение Рима','query':'падение Римской империи'}]}",
+    );
+    expect(res).toEqual({
+      ok: true,
+      topics: [
+        { title: 'Аполлон-11', query: 'высадка на Луну 1969' },
+        { title: 'Падение Рима', query: 'падение Римской империи' },
+      ],
+    });
+  });
+
+  it('восстанавливает JSON с ключами без кавычек', () => {
+    const res = parseTopics(
+      '{topics: [{title: "Аполлон-11", query: "высадка на Луну 1969"}, {title: "Падение Рима", query: "падение Римской империи"}]}',
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.topics).toHaveLength(2);
+  });
+
+  it('убирает хвостовые запятые', () => {
+    const res = parseTopics(
+      '{"topics":[{"title":"А","query":"q"},{"title":"Б","query":"r"},]}',
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.topics).toHaveLength(2);
+  });
+
+  it('спасает темы из обрезанного JSON (модель оборвала ответ)', () => {
+    const truncated =
+      '{"topics":[{"title":"Аполлон-11","query":"высадка на Луну 1969"},{"title":"Падение Рима","query":"падение Римской империи"}';
+    const res = parseTopics(truncated);
+    expect(res).toEqual({
+      ok: true,
+      topics: [
+        { title: 'Аполлон-11', query: 'высадка на Луну 1969' },
+        { title: 'Падение Рима', query: 'падение Римской империи' },
+      ],
+    });
   });
 });
 

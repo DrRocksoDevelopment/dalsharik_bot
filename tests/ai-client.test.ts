@@ -189,6 +189,45 @@ describe('OpenRouterClient.generate', () => {
     const { rawText } = await client.generate('x');
     expect(rawText).toBe('[{"a":1}]');
   });
+
+  it('прокидывает reasoning в тело запроса', async () => {
+    const fetchMock = makeFetchMock();
+    const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
+    await client.generate('темы', { reasoning: { effort: 'low' } });
+    const url = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/chat/completions'));
+    const init = url![1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.reasoning).toEqual({ effort: 'low' });
+  });
+
+  it('без reasoning не добавляет поле в тело', async () => {
+    const fetchMock = makeFetchMock();
+    const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
+    await client.generate('темы');
+    const url = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/chat/completions'));
+    const init = url![1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.reasoning).toBeUndefined();
+  });
+
+  it('понятная ошибка, если модель потратила токены на размышления без текста', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/models')) {
+        return new Response(PRICING_BODY, { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({
+          choices: [
+            { message: { role: 'assistant', content: null, reasoning: 'размышления...' } },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
+    await expect(client.generate('x')).rejects.toThrow('размышления');
+  });
 });
 
 describe('getOrCreateClient', () => {

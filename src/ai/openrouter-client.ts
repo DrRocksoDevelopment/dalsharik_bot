@@ -23,6 +23,7 @@ export class OpenRouterError extends Error {
 interface ChatCompletionMessage {
   role: string;
   content?: string | unknown[] | null;
+  reasoning?: unknown;
 }
 
 export interface OpenRouterClientDeps {
@@ -39,6 +40,7 @@ export interface GenerateOptions {
   maxTokens?: number;
   jsonObject?: boolean;
   webSearch?: boolean;
+  reasoning?: { effort?: 'low' | 'medium' | 'high' };
 }
 
 function parsePricingValue(value: unknown): number {
@@ -60,6 +62,12 @@ function extractContent(message: ChatCompletionMessage): string {
       })
       .join('')
       .trim();
+  }
+  if (message.reasoning) {
+    throw new OpenRouterError(
+      null,
+      'модель потратила весь лимит токенов на размышления и не вернула текст — повтори генерацию или уменьши количество вопросов',
+    );
   }
   throw new OpenRouterError(null, 'модель не вернула текстовый ответ');
 }
@@ -158,6 +166,7 @@ export class OpenRouterClient {
       max_tokens: maxTokens,
     };
     if (jsonObject) body.response_format = { type: 'json_object' };
+    if (options?.reasoning) body.reasoning = options.reasoning;
     if (webSearch) {
       body.tools = [{ type: 'openrouter:web_search', parameters: { max_results: 3 } }];
       body.provider = { require_parameters: true };
