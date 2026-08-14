@@ -210,6 +210,16 @@ describe('OpenRouterClient.generate', () => {
     expect(body.reasoning).toBeUndefined();
   });
 
+  it('reasoning: { enabled: false } отправляет явное отключение', async () => {
+    const fetchMock = makeFetchMock();
+    const client = new OpenRouterClient({ apiKey: 'k', model: 'test/model', fetchFn: fetchMock as unknown as typeof fetch });
+    await client.generate('темы', { reasoning: { enabled: false } });
+    const url = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/chat/completions'));
+    const init = url![1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.reasoning).toEqual({ enabled: false });
+  });
+
   it('понятная ошибка, если модель потратила токены на размышления без текста', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

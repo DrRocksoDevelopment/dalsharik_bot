@@ -119,8 +119,9 @@ export interface AiHostDeps {
   streamer: TextStreamer;
   envApiKey?: string | null;
   envModel?: string | null;
+  envOpenrouterTimeoutMs?: number;
   hostInstruction?: string;
-  createClient?: (apiKey: string, model: string) => OpenRouterClient;
+  createClient?: (apiKey: string, model: string, timeoutMs?: number) => OpenRouterClient;
   metrics?: MetricsStore;
 }
 
@@ -141,7 +142,11 @@ export class AiHost implements ShowHost {
         return 'static';
       }
 
-      const client = (this.deps.createClient ?? getOrCreateClient)(apiKey, model);
+      const client = (this.deps.createClient ?? getOrCreateClient)(
+        apiKey,
+        model,
+        this.deps.envOpenrouterTimeoutMs,
+      );
       const instruction = settings?.hostPrompt ?? this.hostInstruction;
       const prompt = buildHostPrompt(ctx, instruction);
       const { rawText, usage } = await client.generate(prompt, {

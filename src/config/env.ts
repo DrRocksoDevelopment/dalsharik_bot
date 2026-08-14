@@ -9,8 +9,10 @@ export interface EnvConfig {
   botAdminId: number | null;
   openrouterApiKey: string | null;
   openrouterModel: string | null;
+  openrouterTimeoutMs: number;
   firecrawlApiKey: string | null;
   firecrawlBaseUrl: string;
+  firecrawlTimeoutMs: number;
 }
 
 function required(name: string): string {
@@ -27,6 +29,13 @@ function optional(name: string): string | null {
   return value.trim();
 }
 
+function optionalInt(name: string, fallback: number): number {
+  const value = process.env[name];
+  if (!value || value.trim() === '') return fallback;
+  const n = Number(value.trim());
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 export function loadEnv(): EnvConfig {
   return {
     botToken: required('BOT_TOKEN'),
@@ -41,7 +50,9 @@ export function loadEnv(): EnvConfig {
       : null,
     openrouterApiKey: optional('OPENROUTER_API_KEY'),
     openrouterModel: optional('OPENROUTER_MODEL'),
+    openrouterTimeoutMs: optionalInt('OPENROUTER_TIMEOUT_MS', 300_000),
     firecrawlApiKey: optional('FIRECRAWL_API_KEY'),
     firecrawlBaseUrl: process.env.FIRECRAWL_BASE_URL?.trim() || 'http://localhost:3002',
+    firecrawlTimeoutMs: optionalInt('FIRECRAWL_TIMEOUT_MS', 300_000),
   };
 }

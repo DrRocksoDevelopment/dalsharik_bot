@@ -76,6 +76,7 @@ export async function main(): Promise<void> {
     streamer,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
+    envOpenrouterTimeoutMs: env.openrouterTimeoutMs,
     metrics,
   });
 
@@ -135,8 +136,10 @@ export async function main(): Promise<void> {
     metrics,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
+    envOpenrouterTimeoutMs: env.openrouterTimeoutMs,
     envFirecrawlApiKey: env.firecrawlApiKey,
     envFirecrawlBaseUrl: env.firecrawlBaseUrl,
+    envFirecrawlTimeoutMs: env.firecrawlTimeoutMs,
   });
 
   registerBroadcastCommand(bot, {

@@ -51,8 +51,10 @@ describe('loadEnv', () => {
       botAdminId: 42,
       openrouterApiKey: 'sk-or-test',
       openrouterModel: 'openrouter/auto',
+      openrouterTimeoutMs: 300000,
       firecrawlApiKey: 'fc-test',
       firecrawlBaseUrl: 'http://localhost:3002',
+      firecrawlTimeoutMs: 300000,
     });
   });
 
@@ -68,8 +70,10 @@ describe('loadEnv', () => {
       botAdminId: null,
       openrouterApiKey: null,
       openrouterModel: null,
+      openrouterTimeoutMs: 300000,
       firecrawlApiKey: null,
       firecrawlBaseUrl: 'http://localhost:3002',
+      firecrawlTimeoutMs: 300000,
     });
   });
 
