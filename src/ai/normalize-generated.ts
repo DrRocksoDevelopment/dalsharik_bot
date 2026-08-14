@@ -135,7 +135,7 @@ export function sanitizeGeneratedQuestion(
 
 export function normalizeGenerated(
   text: string,
-  opts: { existingIds: string[]; existingTexts: string[]; now?: string },
+  opts: { existingIds: string[]; existingTexts: string[]; existingTopics?: string[]; now?: string },
 ): NormalizeResult {
   const now = opts.now ?? new Date().toISOString();
   const parsed = parseGeneratedText(text);
@@ -143,6 +143,7 @@ export function normalizeGenerated(
 
   const assignId = nextQuestionId(opts.existingIds);
   const seenTexts = new Set(opts.existingTexts.map((t) => t.trim().toLowerCase()));
+  const seenTopics = new Set((opts.existingTopics ?? []).map((t) => t.trim().toLowerCase()));
   const questions: Question[] = [];
   const rejected: { raw: unknown; errors: string[] }[] = [];
 
@@ -157,7 +158,13 @@ export function normalizeGenerated(
       rejected.push({ raw, errors: ['повторяет существующий вопрос'] });
       continue;
     }
+    const topicKey = res.question.event.title.trim().toLowerCase();
+    if (seenTopics.has(topicKey)) {
+      rejected.push({ raw, errors: ['повторяет тему существующего вопроса'] });
+      continue;
+    }
     seenTexts.add(key);
+    seenTopics.add(topicKey);
     questions.push(res.question);
   }
 

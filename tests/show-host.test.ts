@@ -158,7 +158,7 @@ describe('AiHost', () => {
       expect.any(String),
       expect.objectContaining({ temperature: 0.9, maxTokens: 800, webSearch: false }),
     );
-    expect(streamer.stream).toHaveBeenCalledWith('-100123', ['Привет!']);
+    expect(streamer.stream).toHaveBeenCalledWith('-100123', ['Привет!'], undefined);
   });
 
   it('стримит план и возвращает ai', async () => {
@@ -170,7 +170,16 @@ describe('AiHost', () => {
     expect(streamer.stream).toHaveBeenCalledWith('-100123', [
       '17 человек выбрали Б…',
       'Жаль, что неправильно',
-    ]);
+    ], undefined);
+  });
+
+  it('передаёт стримеру id сообщения с вопросом для реплая', async () => {
+    const client = makeClient(['Шоу начинается']);
+    const streamer = makeStreamer();
+    const { host } = await makeHost({ key: 'k', model: 'm', client, streamer });
+    const mode = await host.show('-100123', makeContext({ questionMessageId: 42 }));
+    expect(mode).toBe('ai');
+    expect(streamer.stream).toHaveBeenCalledWith('-100123', ['Шоу начинается'], 42);
   });
 
   it('при невалидном плане возвращает static', async () => {

@@ -6,3 +6,7 @@ data/
 .env
 *.log
 .DS_Store
+scripts/*-dump.txt
+scripts/*-dump.md
+scripts/*-dump.json
+scripts/phase3-raw.txt

@@ -1,0 +1,37 @@
+name: Фича
+description: Предложение новой функциональности
+title: "[FEAT] "
+labels: ["feat"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Цель
+      description: Что должна дать фича пользователям/боту?
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Ожидаемое поведение
+      description: Что именно должно происходить.
+  - type: textarea
+    id: commands
+    attributes:
+      label: Команды / интерфейс
+      description: Новые команды, кнопки, сообщения, тексты.
+  - type: textarea
+    id: storage
+    attributes:
+      label: Хранение
+      description: Какие данные/сущности нужны (если применимо).
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Чеклист готовности
+      description: Что должно быть сделано, чтобы фича считалась готовой
+      options:
+        - label: "`npm run build` проходит"
+        - label: "`npm test` проходит"
+        - label: "CHANGELOG.md обновлён ([Unreleased])"
+        - label: "Справка /help обновлена"

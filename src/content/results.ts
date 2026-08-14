@@ -22,17 +22,26 @@ export interface ResultsContext {
   streakHighlights?: StreakHighlight[];
   chatStreakRecord?: number | null;
   nextEventLocalTime?: string;
+  messageLink?: string;
 }
 
 export interface EmptyResultsContext {
   question: Question;
   nextEventLocalTime?: string;
+  messageLink?: string;
+}
+
+function messageLinkLine(messageLink?: string): string {
+  return messageLink ? `🔗 Исходный вопрос: ${messageLink}` : '';
 }
 
 export function buildEmptyResultsMessage(context: EmptyResultsContext): string {
   const { question, nextEventLocalTime } = context;
   const correct = question.answers.find((a) => a.id === question.correctAnswer);
   const parts: string[] = [];
+
+  const link = messageLinkLine(context.messageLink);
+  if (link) parts.push(link);
 
   parts.push('🙊 Никто не ответил.');
   parts.push('');
@@ -61,10 +70,14 @@ export function buildShowSummaryMessage(context: {
   question: Question;
   results: QuestionResults;
   nextEventLocalTime?: string;
+  messageLink?: string;
 }): string {
   const { question, results, nextEventLocalTime } = context;
   const correct = question.answers.find((a) => a.id === question.correctAnswer);
   const parts: string[] = [];
+
+  const link = messageLinkLine(context.messageLink);
+  if (link) parts.push(link);
 
   parts.push('📇 Разбор завершён');
   parts.push('');
@@ -131,6 +144,9 @@ function formatStreaks(
 export function buildResultsMessage(context: ResultsContext): string {
   const { question, results, users, slogan } = context;
   const parts: string[] = [];
+
+  const link = messageLinkLine(context.messageLink);
+  if (link) parts.push(link);
 
   parts.push('🏁 Итоги');
   parts.push('');

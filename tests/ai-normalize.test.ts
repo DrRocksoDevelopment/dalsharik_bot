@@ -124,7 +124,10 @@ describe('normalizeGenerated', () => {
   const now = '2026-01-01T00:00:00.000Z';
 
   it('возвращает валидные вопросы с уникальными id', () => {
-    const text = JSON.stringify([rawValid, { ...rawValid, question: 'Второй вопрос' }]);
+    const text = JSON.stringify([
+      rawValid,
+      { ...rawValid, question: 'Второй вопрос', event: { ...rawValid.event, title: 'Аполлон-12' } },
+    ]);
     const res = normalizeGenerated(text, { existingIds: ['event_000010'], existingTexts: [], now });
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -166,6 +169,21 @@ describe('normalizeGenerated', () => {
     if (res.ok) {
       expect(res.questions).toHaveLength(1);
       expect(res.rejected).toHaveLength(1);
+    }
+  });
+
+  it('не повторяет темы существующих вопросов', () => {
+    const text = JSON.stringify([rawValid]);
+    const res = normalizeGenerated(text, {
+      existingIds: [],
+      existingTexts: [],
+      existingTopics: ['Apollo 11'],
+      now,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.questions).toHaveLength(0);
+      expect(res.rejected[0]!.errors).toContain('повторяет тему существующего вопроса');
     }
   });
 

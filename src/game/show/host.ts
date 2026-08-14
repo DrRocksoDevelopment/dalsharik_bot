@@ -29,6 +29,7 @@ export interface HostContext {
   streakHighlights?: StreakHighlight[];
   chatStreakRecord?: number | null;
   nextEventLocalTime?: string;
+  questionMessageId?: number;
 }
 
 export type ShowMode = 'ai' | 'static';
@@ -118,8 +119,9 @@ export interface AiHostDeps {
   streamer: TextStreamer;
   envApiKey?: string | null;
   envModel?: string | null;
+  envOpenrouterTimeoutMs?: number;
   hostInstruction?: string;
-  createClient?: (apiKey: string, model: string) => OpenRouterClient;
+  createClient?: (apiKey: string, model: string, timeoutMs?: number) => OpenRouterClient;
   metrics?: MetricsStore;
 }
 
@@ -140,7 +142,11 @@ export class AiHost implements ShowHost {
         return 'static';
       }
 
-      const client = (this.deps.createClient ?? getOrCreateClient)(apiKey, model);
+      const client = (this.deps.createClient ?? getOrCreateClient)(
+        apiKey,
+        model,
+        this.deps.envOpenrouterTimeoutMs,
+      );
       const instruction = settings?.hostPrompt ?? this.hostInstruction;
       const prompt = buildHostPrompt(ctx, instruction);
       const { rawText, usage } = await client.generate(prompt, {
@@ -156,7 +162,7 @@ export class AiHost implements ShowHost {
         return 'static';
       }
 
-      await this.deps.streamer.stream(chatId, plan.lines);
+      await this.deps.streamer.stream(chatId, plan.lines, ctx.questionMessageId);
       return 'ai';
     } catch (err) {
       this.deps.logger.error('AI-ведущий: ошибка, статичная карточка', {

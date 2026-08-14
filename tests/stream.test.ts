@@ -23,7 +23,7 @@ describe('EditTextStreamer', () => {
     await streamer.stream('-100123', ['Первая строка', 'Вторая', 'Третья']);
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith('-100123', 'Первая строка');
+    expect(sendMessage).toHaveBeenCalledWith('-100123', 'Первая строка', undefined);
     expect(editMessageText).toHaveBeenCalledTimes(2);
     expect(editMessageText).toHaveBeenNthCalledWith(1, '-100123', 1, 'Первая строка\nВторая');
     expect(editMessageText).toHaveBeenNthCalledWith(
@@ -32,6 +32,15 @@ describe('EditTextStreamer', () => {
       1,
       'Первая строка\nВторая\nТретья',
     );
+  });
+
+  it('передаёт replyToMessageId в стартовое сообщение', async () => {
+    const { sender, sendMessage } = makeSender();
+    const streamer = new EditTextStreamer({ sender, logger: makeLogger(), pauseMs: 1 });
+
+    await streamer.stream('-100123', ['Строка'], 42);
+
+    expect(sendMessage).toHaveBeenCalledWith('-100123', 'Строка', 42);
   });
 
   it('делает драматическую паузу между правками', async () => {
@@ -69,7 +78,7 @@ describe('EditTextStreamer', () => {
     await streamer.stream('-100123', ['A', 'B', 'C', 'D']);
 
     expect(sendMessage).toHaveBeenCalledTimes(2);
-    expect(sendMessage).toHaveBeenLastCalledWith('-100123', 'B\nC\nD');
+    expect(sendMessage).toHaveBeenLastCalledWith('-100123', 'B\nC\nD', undefined);
     expect(editMessageText).toHaveBeenCalledTimes(1);
   });
 

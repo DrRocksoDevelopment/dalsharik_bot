@@ -2,7 +2,7 @@ import type { Logger } from 'winston';
 import type { GenerationUsage } from './types.js';
 
 export const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
-const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = 300_000;
 const DEFAULT_MAX_TOKENS = 4096;
 
 export interface ModelPricing {
@@ -23,6 +23,7 @@ export class OpenRouterError extends Error {
 interface ChatCompletionMessage {
   role: string;
   content?: string | unknown[] | null;
+  reasoning?: unknown;
 }
 
 export interface OpenRouterClientDeps {
@@ -39,6 +40,8 @@ export interface GenerateOptions {
   maxTokens?: number;
   jsonObject?: boolean;
   webSearch?: boolean;
+  reasoning?: { effort?: 'low' | 'medium' | 'high'; enabled?: boolean };
+  cache?: boolean;
 }
 
 function parsePricingValue(value: unknown): number {
@@ -60,6 +63,12 @@ function extractContent(message: ChatCompletionMessage): string {
       })
       .join('')
       .trim();
+  }
+  if (message.reasoning) {
+    throw new OpenRouterError(
+      null,
+      'модель потратила весь лимит токенов на размышления и не вернула текст — повтори генерацию или уменьши количество вопросов',
+    );
   }
   throw new OpenRouterError(null, 'модель не вернула текстовый ответ');
 }
@@ -98,6 +107,7 @@ export class OpenRouterClient {
         },
       });
     } catch (err) {
+      clearTimeout(timer);
       const aborted = err instanceof Error && err.name === 'AbortError';
       throw new OpenRouterError(
         null,
@@ -105,15 +115,26 @@ export class OpenRouterClient {
           ? `таймаут запроса (${Math.round(this.timeoutMs / 1000)} c)`
           : `сеть: ${err instanceof Error ? err.message : String(err)}`,
       );
+    }
+
+    try {
+      if (!response.ok) {
+        const bodyText = await response.text().catch(() => '');
+        throw new OpenRouterError(response.status, this.errorForStatus(response.status, bodyText));
+      }
+      return (await response.json()) as Promise<unknown>;
+    } catch (err) {
+      if (err instanceof OpenRouterError) throw err;
+      const aborted = err instanceof Error && err.name === 'AbortError';
+      throw new OpenRouterError(
+        null,
+        aborted
+          ? `таймаут чтения ответа (${Math.round(this.timeoutMs / 1000)} c)`
+          : `модель не вернула тело: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       clearTimeout(timer);
     }
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new OpenRouterError(response.status, this.errorForStatus(response.status, body));
-    }
-    return response.json() as Promise<unknown>;
   }
 
   private errorForStatus(status: number, body: string): string {
@@ -158,15 +179,20 @@ export class OpenRouterClient {
       max_tokens: maxTokens,
     };
     if (jsonObject) body.response_format = { type: 'json_object' };
+    if (options && 'reasoning' in options) body.reasoning = options.reasoning ?? { enabled: false };
     if (webSearch) {
       body.tools = [{ type: 'openrouter:web_search', parameters: { max_results: 3 } }];
       body.provider = { require_parameters: true };
     }
 
+    const headers: Record<string, string> = {};
+    if (options?.cache === false) headers['X-OpenRouter-Cache'] = 'false';
+
     const [data, pricing] = await Promise.all([
       this.requestJson('/chat/completions', {
         method: 'POST',
         body: JSON.stringify(body),
+        headers,
       }) as Promise<{
         choices?: { message?: ChatCompletionMessage }[];
         usage?: {
@@ -222,11 +248,15 @@ export class OpenRouterClient {
 
 const clientCache = new Map<string, OpenRouterClient>();
 
-export function getOrCreateClient(apiKey: string, model: string): OpenRouterClient {
-  const key = `${apiKey} ${model}`;
+export function getOrCreateClient(
+  apiKey: string,
+  model: string,
+  timeoutMs?: number,
+): OpenRouterClient {
+  const key = `${apiKey} ${model} ${timeoutMs ?? ''}`;
   let client = clientCache.get(key);
   if (!client) {
-    client = new OpenRouterClient({ apiKey, model });
+    client = new OpenRouterClient({ apiKey, model, timeoutMs });
     clientCache.set(key, client);
   }
   return client;

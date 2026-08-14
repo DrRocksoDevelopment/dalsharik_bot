@@ -27,6 +27,10 @@ import { registerImport } from './bot/import-commands.js';
 import { registerMetricsCommand } from './bot/metrics-commands.js';
 import { registerAiCommands } from './bot/ai-commands.js';
 import { registerBroadcastCommand } from './bot/broadcast-commands.js';
+import {
+  buildRatingKeyboard,
+  registerRatingCommands,
+} from './bot/rating-commands.js';
 
 export async function main(): Promise<void> {
   await fs.mkdir(env.dataDir, { recursive: true });
@@ -72,6 +76,7 @@ export async function main(): Promise<void> {
     streamer,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
+    envOpenrouterTimeoutMs: env.openrouterTimeoutMs,
     metrics,
   });
 
@@ -81,6 +86,7 @@ export async function main(): Promise<void> {
     sender: new TelegramFinalizerSender(bot.telegram),
     metrics,
     host,
+    ratingKeyboard: (questionId) => buildRatingKeyboard(questionId),
   });
 
   reloader = new QuestionReloader({
@@ -130,6 +136,10 @@ export async function main(): Promise<void> {
     metrics,
     envApiKey: env.openrouterApiKey,
     envModel: env.openrouterModel,
+    envOpenrouterTimeoutMs: env.openrouterTimeoutMs,
+    envFirecrawlApiKey: env.firecrawlApiKey,
+    envFirecrawlBaseUrl: env.firecrawlBaseUrl,
+    envFirecrawlTimeoutMs: env.firecrawlTimeoutMs,
   });
 
   registerBroadcastCommand(bot, {
@@ -137,6 +147,8 @@ export async function main(): Promise<void> {
     adminId: env.botAdminId,
     store,
   });
+
+  registerRatingCommands(bot, { logger, store });
 
   scheduler = new DefaultScheduler({ logger, store, publisher, finalizer });
   await scheduler.start();

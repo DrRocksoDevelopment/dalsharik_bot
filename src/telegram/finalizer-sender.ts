@@ -1,8 +1,14 @@
 import type { Telegram } from 'telegraf';
+import type { InlineKeyboardMarkup } from '@telegraf/types';
 
 export interface FinalizerSender {
   closePoll(chatId: string, messageId: number): Promise<number>;
-  sendMessage(chatId: string, text: string): Promise<void>;
+  sendMessage(
+    chatId: string,
+    text: string,
+    replyToMessageId?: number,
+    replyMarkup?: InlineKeyboardMarkup,
+  ): Promise<void>;
 }
 
 export class TelegramFinalizerSender implements FinalizerSender {
@@ -13,7 +19,17 @@ export class TelegramFinalizerSender implements FinalizerSender {
     return poll.total_voter_count ?? 0;
   }
 
-  async sendMessage(chatId: string, text: string): Promise<void> {
-    await this.telegram.sendMessage(chatId, text);
+  async sendMessage(
+    chatId: string,
+    text: string,
+    replyToMessageId?: number,
+    replyMarkup?: InlineKeyboardMarkup,
+  ): Promise<void> {
+    await this.telegram.sendMessage(chatId, text, {
+      reply_parameters: replyToMessageId
+        ? { message_id: replyToMessageId, allow_sending_without_reply: true }
+        : undefined,
+      reply_markup: replyMarkup,
+    });
   }
 }
