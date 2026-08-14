@@ -6,7 +6,7 @@ export interface PollRecord {
   chatId: string;
   questionId: string;
   messageId: number;
-  optionMap: string[];
+  optionMap: number[];
   createdAt: string;
   expiresAt: string;
   status: PollStatus;

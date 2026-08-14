@@ -63,6 +63,15 @@ export async function processPollAnswer(
     deps.logger.error('Вопрос не найден для poll', { questionId: poll.questionId });
     return;
   }
+  if (selectedOption < 0 || selectedOption >= question.answers.length) {
+    deps.logger.warn('Некорректный индекс варианта', {
+      telegramPollId,
+      userId,
+      selectedOption,
+      answerCount: question.answers.length,
+    });
+    return;
+  }
 
   const answeredAtMs = Date.now();
   const pollCreatedAt = Date.parse(poll.createdAt);

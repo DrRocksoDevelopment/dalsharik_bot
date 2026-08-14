@@ -15,12 +15,11 @@ const rawValid = {
   event: { title: 'Apollo 11', context: 'Контекст события' },
   question: 'Что произошло дальше?',
   answers: [
-    { id: 'A', text: 'a' },
-    { id: 'B', text: 'b' },
-    { id: 'C', text: 'c' },
-    { id: 'D', text: 'd' },
+    { text: 'a', correct: false },
+    { text: 'b', correct: true },
+    { text: 'c', correct: false },
+    { text: 'd', correct: false },
   ],
-  correctAnswer: 'B',
   explanation: 'Объяснение правильного ответа',
   sources: ['https://example.com/1'],
 };
@@ -103,9 +102,14 @@ describe('sanitizeGeneratedQuestion', () => {
     if (!res.ok) expect(res.errors.some((e) => e.includes('http(s)'))).toBe(true);
   });
 
-  it('отклоняет правильный ответ не среди вариантов', () => {
-    const res = sanitizeGeneratedQuestion({ ...rawValid, correctAnswer: 'Z' }, () => 'id', 'now');
+  it('отклоняет отсутствие верного варианта', () => {
+    const res = sanitizeGeneratedQuestion(
+      { ...rawValid, answers: rawValid.answers.map((a) => ({ ...a, correct: false })) },
+      () => 'id',
+      'now',
+    );
     expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.errors.some((e) => e.includes('ровно один верный'))).toBe(true);
   });
 
   it('отклоняет слишком мало вариантов', () => {
@@ -199,7 +203,18 @@ describe('normalizeGenerated', () => {
       const q: Question = res.questions[0]!;
       expect(q.id).toBe('event_000001');
       expect(q.answers.length).toBeGreaterThanOrEqual(4);
-      expect(q.correctAnswer).toBe('B');
+      expect(q.answers.filter((a) => a.correct)).toHaveLength(1);
+      expect(q.answers.find((a) => a.correct)?.text).toBe('b');
+    }
+  });
+
+  it('перемешивает варианты, сохраняя ровно один верный', () => {
+    const res = sanitizeGeneratedQuestion(rawValid, () => 'event_000001', now);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.question.answers.filter((a) => a.correct)).toHaveLength(1);
+      expect(res.question.answers.find((a) => a.correct)?.text).toBe('b');
+      expect(new Set(res.question.answers.map((a) => a.text))).toEqual(new Set(['a', 'b', 'c', 'd']));
     }
   });
 });

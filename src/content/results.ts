@@ -37,7 +37,6 @@ function messageLinkLine(messageLink?: string): string {
 
 export function buildEmptyResultsMessage(context: EmptyResultsContext): string {
   const { question, nextEventLocalTime } = context;
-  const correct = question.answers.find((a) => a.id === question.correctAnswer);
   const parts: string[] = [];
 
   const link = messageLinkLine(context.messageLink);
@@ -45,9 +44,7 @@ export function buildEmptyResultsMessage(context: EmptyResultsContext): string {
 
   parts.push('🙊 Никто не ответил.');
   parts.push('');
-  parts.push(
-    `✅ Правильный ответ: ${question.correctAnswer}${correct ? ` — ${correct.text}` : ''}`,
-  );
+  parts.push(`✅ ${formatCorrectAnswer(question)}`);
   parts.push('');
   parts.push('📖 А на самом деле...');
   parts.push('');
@@ -73,7 +70,6 @@ export function buildShowSummaryMessage(context: {
   messageLink?: string;
 }): string {
   const { question, results, nextEventLocalTime } = context;
-  const correct = question.answers.find((a) => a.id === question.correctAnswer);
   const parts: string[] = [];
 
   const link = messageLinkLine(context.messageLink);
@@ -86,9 +82,7 @@ export function buildShowSummaryMessage(context: {
   parts.push('Варианты:');
   parts.push(formatDistribution(results, question));
   parts.push('');
-  parts.push(
-    `✅ Правильный ответ: ${question.correctAnswer}${correct ? ` — ${correct.text}` : ''}`,
-  );
+  parts.push(`✅ ${formatCorrectAnswer(question)}`);
 
   if (question.sources.length > 0) {
     parts.push('');
@@ -105,12 +99,20 @@ export function buildShowSummaryMessage(context: {
 
 function formatDistribution(results: QuestionResults, question: Question): string {
   const lines: string[] = [];
-  for (const answer of question.answers) {
-    const correct = answer.id === question.correctAnswer;
-    const marker = correct ? '🟢' : '🔴';
-    lines.push(`${marker} ${answer.id} — ${results.answerDistribution[answer.id] ?? 0}`);
+  for (let i = 0; i < question.answers.length; i += 1) {
+    const answer = question.answers[i]!;
+    const letter = String.fromCharCode(65 + i);
+    const marker = answer.correct ? '🟢' : '🔴';
+    lines.push(`${marker} ${letter} — ${results.answerDistribution[String(i)] ?? 0}`);
   }
   return lines.join('\n');
+}
+
+function formatCorrectAnswer(question: Question): string {
+  const idx = question.answers.findIndex((a) => a.correct);
+  if (idx === -1) return 'Правильный ответ: не указан';
+  const letter = String.fromCharCode(65 + idx);
+  return `Правильный ответ: ${letter} — ${question.answers[idx]!.text}`;
 }
 
 function formatTopPlayers(results: QuestionResults, users: Map<string, UserProfile>): string {

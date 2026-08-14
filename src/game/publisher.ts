@@ -26,7 +26,7 @@ export interface QuestionPublisher {
   buildPollPayload(question: Question): {
     text: string;
     options: string[];
-    optionMap: string[];
+    optionMap: number[];
   };
 }
 
@@ -37,9 +37,9 @@ export class DefaultQuestionPublisher implements QuestionPublisher {
     if (question.answers.length < 2) {
       throw new Error(`Вопрос ${question.id}: нужно минимум 2 варианта`);
     }
-    const order = shuffle(question.answers);
-    const optionMap = order.map((a) => a.id);
-    const options = order.map((a) => a.text);
+    const order = shuffle(question.answers.map((_, i) => i));
+    const optionMap = order;
+    const options = order.map((i) => question.answers[i]!.text);
     const text = `${question.event.title}\n\n${question.question}\n\n${formatDifficulty(question.difficulty)}`;
     return { text, options, optionMap };
   }

@@ -42,16 +42,19 @@ function displayName(user: UserProfile | undefined, userId: string): string {
 
 export function buildHostPrompt(ctx: HostContext, instruction: string = DEFAULT_HOST_PROMPT): string {
   const { question, results, users } = ctx;
-  const correct = question.answers.find((a) => a.id === question.correctAnswer);
   const parts: string[] = [];
 
   parts.push(`Чат: ${ctx.chatTitle ?? 'наш чат'}`);
   parts.push(`Событие: ${question.event.title} (${question.eventDate})`);
   parts.push(`Контекст: ${question.event.context}`);
   parts.push(`Вопрос: ${question.question}`);
-  parts.push(`Варианты:\n${question.answers.map((a) => `- ${a.id}. ${a.text}`).join('\n')}`);
   parts.push(
-    `Правильный ответ: ${question.correctAnswer}${correct ? ` — ${correct.text}` : ''}`,
+    `Варианты:\n${question.answers.map((a, i) => `- ${String.fromCharCode(65 + i)}. ${a.text}`).join('\n')}`,
+  );
+  const correctIdx = question.answers.findIndex((a) => a.correct);
+  const correct = correctIdx === -1 ? undefined : question.answers[correctIdx];
+  parts.push(
+    `Правильный ответ: ${correctIdx === -1 ? '—' : String.fromCharCode(65 + correctIdx)}${correct ? ` — ${correct.text}` : ''}`,
   );
   parts.push(`Объяснение: ${question.explanation}`);
   parts.push('');
@@ -60,7 +63,7 @@ export function buildHostPrompt(ctx: HostContext, instruction: string = DEFAULT_
     `Ответили: ${results.totalPlayers}; правильно: ${results.correct}; неверно: ${results.wrong}; точность: ${results.accuracy.toFixed(1)}%`,
   );
   parts.push(
-    `Распределение:\n${question.answers.map((a) => `- ${a.id}. ${results.answerDistribution[a.id] ?? 0}`).join('\n')}`,
+    `Распределение:\n${question.answers.map((a, i) => `- ${String.fromCharCode(65 + i)}. ${results.answerDistribution[String(i)] ?? 0}`).join('\n')}`,
   );
   if (results.topPlayers.length > 0) {
     parts.push(

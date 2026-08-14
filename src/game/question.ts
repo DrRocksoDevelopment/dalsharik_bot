@@ -6,8 +6,8 @@ export interface QuestionEvent {
 }
 
 export interface QuestionAnswer {
-  id: string;
   text: string;
+  correct: boolean;
 }
 
 export interface Question {
@@ -19,7 +19,6 @@ export interface Question {
   event: QuestionEvent;
   question: string;
   answers: QuestionAnswer[];
-  correctAnswer: string;
   explanation: string;
   sources: string[];
   nextEventId?: string;
@@ -35,7 +34,6 @@ export function isQuestion(q: unknown): q is Question {
     typeof obj.category === 'string' &&
     typeof obj.difficulty === 'number' &&
     typeof obj.question === 'string' &&
-    typeof obj.correctAnswer === 'string' &&
     Array.isArray(obj.answers) &&
     Array.isArray(obj.sources)
   );

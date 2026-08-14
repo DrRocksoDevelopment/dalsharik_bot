@@ -151,15 +151,14 @@ export const MESSAGES = {
     difficulty: number;
     event: { title: string; context: string };
     question: string;
-    answers: { id: string; text: string }[];
-    correctAnswer: string;
+    answers: { text: string; correct: boolean }[];
     explanation: string;
     sources: string[];
   }) =>
     `🆕 Новый вопрос: *${q.event.title}*\n\n` +
     `${q.event.context}\n\n` +
     `❓ *${q.question}*\n\n` +
-    q.answers.map((a) => `• ${a.text}${a.id === q.correctAnswer ? ' ✅' : ''}`).join('\n') +
+    q.answers.map((a) => `• ${a.text}${a.correct ? ' ✅' : ''}`).join('\n') +
     `\n\n${formatDifficulty(q.difficulty)} · Категория: ${q.category}\n` +
     `Тип: ${q.type}\n\n` +
     `Объяснение: ${q.explanation}\n` +

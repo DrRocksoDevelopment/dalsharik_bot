@@ -4,7 +4,7 @@ export interface AnswerRecord {
   chatId: string;
   questionId: string;
   telegramPollId: string;
-  selectedOption: string;
+  selectedOption: number;
   isCorrect?: boolean;
   answeredAt: string;
   reactionTimeMs: number;

@@ -48,7 +48,8 @@ export function calculateResults(answers: AnswerRecord[]): QuestionResults {
 
   const answerDistribution: Record<string, number> = {};
   for (const a of answers) {
-    answerDistribution[a.selectedOption] = (answerDistribution[a.selectedOption] ?? 0) + 1;
+    const key = String(a.selectedOption);
+    answerDistribution[key] = (answerDistribution[key] ?? 0) + 1;
   }
 
   const byUser = new Map<string, number>();

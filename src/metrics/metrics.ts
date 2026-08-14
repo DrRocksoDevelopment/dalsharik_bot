@@ -183,7 +183,7 @@ export interface RecordAnswerInput {
   questionId: string;
   isCorrect: boolean;
   reactionTimeMs: number;
-  selectedOption: string;
+  selectedOption: number;
   score: number;
   currentStreak: number;
   bestStreak: number;

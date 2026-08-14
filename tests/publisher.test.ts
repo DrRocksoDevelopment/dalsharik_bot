@@ -40,7 +40,7 @@ describe('publisher', () => {
     expect(poll).not.toBeNull();
     expect(poll!.questionId).toBe('event_000001');
     expect(poll!.optionMap).toHaveLength(4);
-    expect(new Set(poll!.optionMap)).toEqual(new Set(['A', 'B', 'C', 'D']));
+    expect(new Set(poll!.optionMap)).toEqual(new Set([0, 1, 2, 3]));
 
     expect(recorded.lastPayload).not.toBeNull();
     expect(recorded.lastPayload!.options).toHaveLength(4);

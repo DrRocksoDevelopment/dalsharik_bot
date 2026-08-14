@@ -25,14 +25,11 @@ export function validateQuestion(q: Question): string[] {
   if (!Array.isArray(q.answers) || q.answers.length < 4) {
     errors.push('нужно минимум 4 варианта ответа');
   } else {
-    const ids = q.answers.map((a) => a.id);
-    if (new Set(ids).size !== ids.length) errors.push('id вариантов не уникальны');
     if (q.answers.some((a) => !a.text || typeof a.text !== 'string')) {
       errors.push('у варианта нет текста');
     }
-    if (!ids.includes(q.correctAnswer)) {
-      errors.push(`правильный ответ "${q.correctAnswer}" отсутствует среди вариантов`);
-    }
+    const correctCount = q.answers.filter((a) => a.correct === true).length;
+    if (correctCount !== 1) errors.push(`должен быть ровно один верный вариант, найдено: ${correctCount}`);
   }
 
   if (!q.explanation || typeof q.explanation !== 'string') errors.push('нет объяснения');

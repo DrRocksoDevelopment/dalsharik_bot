@@ -43,7 +43,7 @@ describe('надёжность', () => {
     const answers = await t.store.answers.getAll();
     expect(answers).toHaveLength(2);
     expect(answers.map((a) => a.telegramPollId).sort()).toEqual(['tp-1', 'tp-2']);
-    expect(answers.every((a) => a.selectedOption === 'C')).toBe(true);
+    expect(answers.every((a) => a.selectedOption === 2)).toBe(true);
   });
 
   it('poll сохраняется как sending до отправки в Telegram (sendPoll падает)', async () => {

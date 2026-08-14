@@ -2,6 +2,7 @@ import type { Category, QuestionType } from '../types/index.js';
 import { isQuestionType } from '../types/index.js';
 import { DEFAULT_CONFIG } from '../config/config.js';
 import type { Question, QuestionAnswer } from '../game/question.js';
+import { shuffle } from '../utils/shuffle.js';
 import type { NormalizeResult } from './types.js';
 
 const CATEGORIES = DEFAULT_CONFIG.categories as readonly Category[];
@@ -70,39 +71,33 @@ export function sanitizeGeneratedQuestion(
   >;
   const eventTitle = str(eventRaw.title);
   const eventContext = str(eventRaw.context);
-  const question = str(q.question);
+  const questionText = str(q.question);
   const eventDate = str(q.eventDate);
   const explanation = str(q.explanation);
 
   if (!eventTitle) errors.push('нет заголовка события');
   if (!eventContext) errors.push('нет контекста события');
-  if (!question) errors.push('нет текста вопроса');
+  if (!questionText) errors.push('нет текста вопроса');
   if (!eventDate) errors.push('нет даты события');
   if (!explanation) errors.push('нет объяснения');
 
   const answers = Array.isArray(q.answers) ? q.answers : [];
   const cleanAnswers: QuestionAnswer[] = [];
-  const ids = new Set<string>();
+  let correctCount = 0;
   if (answers.length < 4) {
     errors.push('нужно минимум 4 варианта ответа');
   } else {
     for (const a of answers) {
       const rec = (typeof a === 'object' && a !== null ? a : {}) as Record<string, unknown>;
-      const id = str(rec.id);
       const text = str(rec.text);
-      if (!id) errors.push('у варианта нет id');
-      if (id && ids.has(id)) errors.push(`дублируется id варианта «${id}»`);
+      const correct = rec.correct === true;
       if (!text) errors.push('у варианта нет текста');
-      if (id && text) {
-        ids.add(id);
-        cleanAnswers.push({ id, text });
-      }
+      if (correct) correctCount += 1;
+      if (text) cleanAnswers.push({ text, correct });
     }
   }
-
-  const correctAnswer = str(q.correctAnswer);
-  if (cleanAnswers.length > 0 && !ids.has(correctAnswer)) {
-    errors.push(`правильный ответ «${correctAnswer || '—'}» отсутствует среди вариантов`);
+  if (correctCount !== 1) {
+    errors.push(`должен быть ровно один верный вариант, найдено: ${correctCount}`);
   }
 
   const sources = Array.isArray(q.sources) ? q.sources : [];
@@ -114,23 +109,21 @@ export function sanitizeGeneratedQuestion(
 
   if (errors.length > 0) return { ok: false, errors };
 
-  return {
-    ok: true,
-    question: {
-      id: assignId(),
-      type: type as QuestionType,
-      category: category as Category,
-      difficulty,
-      eventDate,
-      event: { title: eventTitle, context: eventContext },
-      question,
-      answers: cleanAnswers,
-      correctAnswer,
-      explanation,
-      sources: sources.map((s) => (s as string).trim()),
-      createdAt: now,
-    },
+  const built: Question = {
+    id: assignId(),
+    type: type as QuestionType,
+    category: category as Category,
+    difficulty,
+    eventDate,
+    event: { title: eventTitle, context: eventContext },
+    question: questionText,
+    answers: shuffle(cleanAnswers),
+    explanation,
+    sources: sources.map((s) => (s as string).trim()),
+    createdAt: now,
   };
+
+  return { ok: true, question: built };
 }
 
 export function normalizeGenerated(

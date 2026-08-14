@@ -36,7 +36,7 @@ describe('answer processor', () => {
     expect(user!.currentStreak).toBe(0);
 
     const [answer] = await t.store.answers.find((a) => a.userId === '1');
-    expect(answer?.selectedOption).toBe('C');
+    expect(answer?.selectedOption).toBe(2);
     expect(answer?.isCorrect).toBeUndefined();
     expect(answer?.points).toBeUndefined();
     expect(answer?.scoredAt).toBeUndefined();
@@ -50,7 +50,7 @@ describe('answer processor', () => {
 
     const answers = await t.store.answers.find((a) => a.userId === '1');
     expect(answers).toHaveLength(1);
-    expect(answers[0]!.selectedOption).toBe('A');
+    expect(answers[0]!.selectedOption).toBe(0);
   });
 
   it('отзыв голоса (пустые option_ids) удаляет запись', async () => {

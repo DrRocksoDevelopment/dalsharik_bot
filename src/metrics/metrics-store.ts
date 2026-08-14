@@ -393,7 +393,8 @@ export class JsonMetricsStore implements MetricsStore {
       q.times_answered += 1;
       if (input.isCorrect) q.correct += 1;
       q.reaction_time_sum += rt;
-      q.answer_distribution[input.selectedOption] = (q.answer_distribution[input.selectedOption] ?? 0) + 1;
+      const optKey = String(input.selectedOption);
+      q.answer_distribution[optKey] = (q.answer_distribution[optKey] ?? 0) + 1;
     });
   }
 

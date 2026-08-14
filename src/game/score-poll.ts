@@ -140,7 +140,8 @@ async function recomputeUser(
   const scored: ScoredAnswer[] = [];
   let post: UserScoring['post'];
   if (currentUnscored) {
-    const isCorrect = currentUnscored.selectedOption === question.correctAnswer;
+    const answer = question.answers[currentUnscored.selectedOption];
+    const isCorrect = answer?.correct === true;
     const calc = calculatePoints({
       difficulty: question.difficulty,
       streak: currentStreak,
