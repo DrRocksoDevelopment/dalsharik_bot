@@ -14,6 +14,11 @@ import {
 } from '../ai/firecrawl-client.js';
 import { buildFactBase } from '../ai/fact-base.js';
 import { buildTopicsPrompt, parseTopics, searchFactPages } from '../ai/fact-search.js';
+import {
+  buildTopicBlacklist,
+  extractUsedTopics,
+  filterRepeatedTopics,
+} from '../ai/used-topics.js';
 import { buildGenerationPrompt, DEFAULT_GENERATION_PROMPT } from '../ai/generate-prompt.js';
 import { normalizeGenerated } from '../ai/normalize-generated.js';
 import { AI_SETTINGS_ID, type AiSettingsRecord, type GenerationUsage } from '../ai/types.js';
@@ -30,6 +35,7 @@ const MAX_REVIEW_CARDS = 10;
 const MAX_HOST_PROMPT_LENGTH = 3000;
 const MAX_GENERATE_PROMPT_LENGTH = 3000;
 const TOPICS_MAX_TOKENS = 2000;
+const GENERATION_MAX_TOKENS = 8192;
 
 export interface AiCommandsDeps {
   logger: Logger;
@@ -39,10 +45,16 @@ export interface AiCommandsDeps {
   metrics?: MetricsStore;
   envApiKey?: string | null;
   envModel?: string | null;
+  envOpenrouterTimeoutMs?: number;
   envFirecrawlApiKey?: string | null;
   envFirecrawlBaseUrl?: string | null;
-  createClient?: (apiKey: string, model: string) => OpenRouterClient;
-  createFirecrawlClient?: (baseUrl: string, apiKey: string | null) => FirecrawlClient;
+  envFirecrawlTimeoutMs?: number;
+  createClient?: (apiKey: string, model: string, timeoutMs?: number) => OpenRouterClient;
+  createFirecrawlClient?: (
+    baseUrl: string,
+    apiKey: string | null,
+    timeoutMs?: number,
+  ) => FirecrawlClient;
 }
 
 async function getSettings(store: DataStore): Promise<AiSettingsRecord | null> {
@@ -439,35 +451,55 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
       const pending = await deps.reloader.getPending();
       const existingIds = [...pool.map((q) => q.id), ...pending.map((q) => q.id)];
       const existingTexts = [...pool.map((q) => q.question), ...pending.map((q) => q.question)];
+      const existingTopics = extractUsedTopics([...pool, ...pending]);
+      const blacklistTopics = buildTopicBlacklist(existingTopics);
 
-      const client = (deps.createClient ?? getOrCreateClient)(apiKey, model);
+      const client = (deps.createClient ?? getOrCreateClient)(
+        apiKey,
+        model,
+        deps.envOpenrouterTimeoutMs,
+      );
       const firecrawlConfig = resolveFirecrawlConfig(settings, deps);
       const firecrawl = (deps.createFirecrawlClient ?? createFirecrawlClient)(
         firecrawlConfig.baseUrl,
         firecrawlConfig.apiKey,
+        deps.envFirecrawlTimeoutMs,
       );
 
       const topicsResult = await client.generate(buildTopicsPrompt({
         count: parsed.count,
         category: parsed.category,
+        existingTopics: blacklistTopics,
         existingTexts,
       }), {
         webSearch: false,
         jsonObject: true,
         maxTokens: TOPICS_MAX_TOKENS,
-        reasoning: { effort: 'low' },
+        reasoning: { enabled: false },
+        cache: false,
       });
       const topics = parseTopics(topicsResult.rawText);
       if (!topics.ok) {
         await ctx.reply(MESSAGES.aiGenerateError(topics.reason, topicsResult.usage));
         return;
       }
+      const filtered = filterRepeatedTopics(topics.topics, existingTopics);
+      if (filtered.kept.length === 0) {
+        await ctx.reply(
+          MESSAGES.aiGenerateError(
+            `Модель предложила только повторяющиеся темы (${filtered.skipped.length} шт.). Повтори ещё раз.`,
+            topicsResult.usage,
+          ),
+        );
+        return;
+      }
       deps.logger.info('Факт-поиск: темы предложены', {
         topics: topics.topics.length,
+        skipped: filtered.skipped.length,
         mode: firecrawlConfig.mode,
       });
 
-      const { pages, searched } = await searchFactPages(firecrawl, topics.topics);
+      const { pages, searched } = await searchFactPages(firecrawl, filtered.kept);
       const factBase = buildFactBase(pages);
       if (!factBase) {
         await ctx.reply(
@@ -491,14 +523,19 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
       const { rawText, usage } = await client.generate(prompt, {
         webSearch: false,
         jsonObject: true,
-        reasoning: { effort: 'low' },
+        reasoning: { enabled: false },
+        maxTokens: GENERATION_MAX_TOKENS,
       });
       const combinedUsage = sumUsage(topicsResult.usage, {
         ...usage,
         webSearchRequests: searched,
       });
       await deps.metrics?.recordAiUsage({ kind: 'generate', ...combinedUsage });
-      const normalized = normalizeGenerated(rawText, { existingIds, existingTexts });
+      const normalized = normalizeGenerated(rawText, {
+        existingIds,
+        existingTexts,
+        existingTopics,
+      });
 
       if (!normalized.ok) {
         await ctx.reply(MESSAGES.aiGenerateError(normalized.reason, combinedUsage));

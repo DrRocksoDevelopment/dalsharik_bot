@@ -5,13 +5,14 @@ import type { FirecrawlClient, FactPage } from '../src/ai/firecrawl-client.js';
 describe('buildTopicsPrompt', () => {
   it('предлагает ровно столько тем, сколько запрошено', () => {
     const prompt = buildTopicsPrompt({ count: 5, category: 'history', existingTexts: [] });
-    expect(prompt).toContain('Предложи 5 тем');
+    expect(prompt).toContain('Предложи 5 разных реальных');
+    expect(prompt).toContain('ровно 5');
     expect(prompt).toContain('История (history)');
   });
 
   it('ограничивает число тем сверху', () => {
     const prompt = buildTopicsPrompt({ count: 25, category: null, existingTexts: [] });
-    expect(prompt).toContain('Предложи 24 тем');
+    expect(prompt).toContain('ровно 24');
   });
 
   it('передаёт чёрный список существующих вопросов', () => {
@@ -21,6 +22,15 @@ describe('buildTopicsPrompt', () => {
       existingTexts: ['Вопрос про Рим'],
     });
     expect(prompt).toContain('Вопрос про Рим');
+  });
+
+  it('передаёт чёрный список существующих тем событий', () => {
+    const prompt = buildTopicsPrompt({
+      count: 3,
+      category: null,
+      existingTopics: ['Падение Рима'],
+    });
+    expect(prompt).toContain('Падение Рима');
   });
 });
 
@@ -114,25 +124,36 @@ describe('searchFactPages', () => {
     };
   }
 
-  it('собирает страницы только с markdown', async () => {
+  function page(url: string, markdown: string | null, extra: Partial<FactPage> = {}): FactPage {
+    return { title: 't', url, markdown, description: null, facts: [], ...extra };
+  }
+
+  it('собирает страницы с фактами, описанием или markdown', async () => {
     const fc = stubFirecrawl({
       'тема 1': [
-        { title: 'A', url: 'https://a.com', markdown: 'факты A' },
-        { title: 'B', url: 'https://b.com', markdown: null },
+        page('https://a.com', 'факты A'),
+        page('https://b.com', null),
+        page('https://d.com', null, { description: 'описание' }),
+        page('https://e.com', 'x', { facts: [{ fact: 'LLM-факт', sourceUrl: 'https://e.com' }] }),
       ],
-      'тема 2': [{ title: 'C', url: 'https://c.com', markdown: 'факты C' }],
+      'тема 2': [page('https://c.com', 'факты C')],
     });
     const { pages, searched } = await searchFactPages(fc, [
       { title: 'Т1', query: 'тема 1' },
       { title: 'Т2', query: 'тема 2' },
     ]);
     expect(searched).toBe(2);
-    expect(pages.map((p) => p.url)).toEqual(['https://a.com', 'https://c.com']);
+    expect(pages.map((p) => p.url)).toEqual([
+      'https://a.com',
+      'https://d.com',
+      'https://e.com',
+      'https://c.com',
+    ]);
   });
 
   it('ошибка отдельного поиска не роняет остальные', async () => {
     const fc = stubFirecrawl(
-      { 'тема 2': [{ title: 'C', url: 'https://c.com', markdown: 'факты C' }] },
+      { 'тема 2': [page('https://c.com', 'факты C')] },
       new Set(['тема 1']),
     );
     const { pages, searched } = await searchFactPages(fc, [

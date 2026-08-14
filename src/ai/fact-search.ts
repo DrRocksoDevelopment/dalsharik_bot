@@ -15,7 +15,7 @@ export const DEFAULT_TOPICS_PROMPT = `Ты — составитель тем д�
 
 ## Задача
 
-Предложи {count} разных реальных исторических/научных/технологических событий (по категории), по которым можно составить вопрос «Что произошло дальше?»: игроку показывают контекст события, а он угадывает ПОСЛЕДУЮЩЕЕ событие.
+Предложи {count} разных реальных исторических/научных/технологических событий (по категории), по которым можно составить вопрос «Что произошло дальше?»: игроку показывают контекст события, а он угадывает ПОСЛЕДУЮЩЕЕ событие. Количество тем в твоём ответе должно быть ровно {count}.
 
 ## Требования
 
@@ -23,7 +23,6 @@ export const DEFAULT_TOPICS_PROMPT = `Ты — составитель тем д�
 - Тема должна давать «продолжение»: после события произошло что-то конкретное и однозначное.
 - Разнообразь события (разные эпохи, регионы, сферы), не повторяй темы между собой.
 - Избегай тем, совпадающих с уже существующими вопросами (список ниже).
-
 ## Формат ответа
 
 Верни ТОЛЬКО валидный JSON без markdown-обёрток, объект с полем "topics":
@@ -36,7 +35,8 @@ export const DEFAULT_TOPICS_PROMPT = `Ты — составитель тем д�
 export function buildTopicsPrompt(opts: {
   count: number;
   category: Category | null;
-  existingTexts: string[];
+  existingTopics?: string[];
+  existingTexts?: string[];
 }): string {
   const topicsCount = Math.min(opts.count, MAX_TOPICS);
   const categoryLine = opts.category
@@ -44,18 +44,24 @@ export function buildTopicsPrompt(opts: {
     : `Категории: смешай все — ${['history', 'science', 'technology', 'culture', 'geography']
         .map(categoryLabel)
         .join(', ')}`;
-  const blacklist =
-    opts.existingTexts.length > 0
-      ? `\nТемы этих вопросов УЖЕ ЕСТЬ (не используй их):\n${opts.existingTexts
+  const blacklistTopics =
+    opts.existingTopics && opts.existingTopics.length > 0
+      ? `\nТемы этих событий УЖЕ ЕСТЬ (не предлагай их):\n${opts.existingTopics
+          .slice(0, 100)
+          .map((t) => `- ${t}`)
+          .join('\n')}`
+      : '';
+  const blacklistTexts =
+    opts.existingTexts && opts.existingTexts.length > 0
+      ? `\nВопросы с этими темами УЖЕ ЕСТЬ (не используй их):\n${opts.existingTexts
           .slice(0, 40)
           .map((t) => `- ${t}`)
           .join('\n')}`
       : '';
 
-  return `${DEFAULT_TOPICS_PROMPT}
+  return `${DEFAULT_TOPICS_PROMPT.replaceAll('{count}', String(topicsCount))}
 
-${categoryLine}
-Предложи ${topicsCount} тем.${blacklist}`;
+${categoryLine}${blacklistTopics}${blacklistTexts}`;
 }
 
 function normalizeQuotes(text: string): string {
@@ -329,7 +335,7 @@ export async function searchFactPages(
       const found = await firecrawl.search(topic.query, { limit });
       searched += 1;
       for (const page of found) {
-        if (page.markdown) pages.push(page);
+        if (page.facts.length > 0 || page.description || page.markdown) pages.push(page);
       }
     } catch {
       // Ошибка отдельного поиска не роняет весь факт-пак: считаем поиск выполненным,

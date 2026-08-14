@@ -92,7 +92,13 @@ describe('registerAiCommands', () => {
       dataDir: t.dir,
     });
     const firecrawlPages = opts.firecrawlPages ?? [
-      { title: 'Тема', url: 'https://example.com', markdown: 'Факты о событии.' },
+      {
+        title: 'Тема',
+        url: 'https://example.com',
+        markdown: 'Факты о событии.',
+        description: null,
+        facts: [],
+      },
     ];
     registerAiCommands(h.bot, {
       logger: makeLogger(),
@@ -534,7 +540,7 @@ describe('registerAiCommands', () => {
 
     await h.bot.handleUpdate(privateHelp('/generate'));
 
-    expect(createClient).toHaveBeenCalledWith('sk-or-secret-123456', 'test/model');
+    expect(createClient).toHaveBeenCalledWith('sk-or-secret-123456', 'test/model', undefined);
   });
 
   it('/generate при ошибке OpenRouter показывает причину', async () => {
