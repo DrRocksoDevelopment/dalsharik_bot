@@ -1,6 +1,6 @@
 {
   "name": "dalsharik",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Дальшарик — Telegram-бот для групповой викторины «Что было дальше?»",
   "private": true,
   "type": "module",
