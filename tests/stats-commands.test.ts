@@ -33,7 +33,7 @@ function makeAnswer(id: string, overrides: Partial<AnswerRecord> = {}): AnswerRe
     chatId: CHAT_ID,
     questionId: 'event_000001',
     telegramPollId: 'poll-1',
-    selectedOption: 'C',
+    selectedOption: 2,
     isCorrect: true,
     answeredAt: '2026-01-01T00:00:00.000Z',
     reactionTimeMs: 1500,

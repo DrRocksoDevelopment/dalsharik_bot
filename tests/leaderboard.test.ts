@@ -44,7 +44,7 @@ function makeAnswer(userId: string, chatId: string, questionId: string, isCorrec
     chatId,
     questionId,
     telegramPollId: 'telegram-poll-1',
-    selectedOption: 'C',
+    selectedOption: 2,
     isCorrect,
     answeredAt: '2026-01-01T00:00:10.000Z',
     reactionTimeMs,

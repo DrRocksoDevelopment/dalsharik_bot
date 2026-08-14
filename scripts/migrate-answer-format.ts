@@ -22,6 +22,14 @@ async function writeJson(filePath: string, data: unknown): Promise<void> {
   await fs.rename(tmp, filePath);
 }
 
+async function backup(filePath: string): Promise<void> {
+  try {
+    await fs.copyFile(filePath, `${filePath}.bak-answer-format`);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+}
+
 function letterToIndex(letter: string): number | null {
   const code = letter.charCodeAt(0);
   return code >= 65 && code <= 68 ? code - 65 : null;
@@ -37,16 +45,38 @@ function isMigratedAnswer(a: unknown): boolean {
   );
 }
 
+function migrateQuestionSet(questions: Array<Record<string, unknown>>): number {
+  let migrated = 0;
+  for (const q of questions) {
+    if (isMigratedAnswer((q.answers as unknown[])?.[0])) continue;
+    const correctAnswer = String(q.correctAnswer);
+    q.answers = (q.answers as Array<{ id: string; text: string }>).map((a) => ({
+      text: a.text,
+      correct: a.id === correctAnswer,
+    }));
+    delete q.correctAnswer;
+    migrated += 1;
+  }
+  return migrated;
+}
+
 async function run(): Promise<void> {
   const dataDir = getEnv().dataDir;
 
+  const importGlob = join(dataDir, 'imports', 'done', '*.json');
+  const importDirs = await fs.readdir(join(dataDir, 'imports', 'done')).catch(() => []);
+  const importFiles = importDirs
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => join(dataDir, 'imports', 'done', name));
+  void importGlob;
+
+  const extraQuestionFiles = [join(dataDir, 'questions_backup.json'), ...importFiles];
+  for (const filePath of extraQuestionFiles) {
+    await backup(filePath);
+  }
+
   for (const name of FILES) {
-    const filePath = join(dataDir, name);
-    try {
-      await fs.copyFile(filePath, `${filePath}.bak-answer-format`);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    }
+    await backup(join(dataDir, name));
   }
 
   const questions = (await readJson(join(dataDir, 'questions.json'))) as Array<Record<string, unknown>>;
@@ -59,14 +89,23 @@ async function run(): Promise<void> {
     questionById.set(String(q.id), (q.answers as Array<{ id: string }>).slice());
   }
 
-  for (const q of questions) {
-    if (isMigratedAnswer((q.answers as unknown[])?.[0])) continue;
-    const correctAnswer = String(q.correctAnswer);
-    q.answers = (q.answers as Array<{ id: string; text: string }>).map((a) => ({
-      text: a.text,
-      correct: a.id === correctAnswer,
-    }));
-    delete q.correctAnswer;
+  const migratedMain = migrateQuestionSet(questions);
+
+  for (const filePath of extraQuestionFiles) {
+    let list: unknown;
+    try {
+      list = await readJson(filePath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw err;
+    }
+    if (!Array.isArray(list)) {
+      console.warn(`Пропуск ${filePath}: ожидался массив`);
+      continue;
+    }
+    const migrated = migrateQuestionSet(list as Array<Record<string, unknown>>);
+    await writeJson(filePath, list);
+    console.log(`Мигрированы вопросы: ${filePath} (${migrated} вопросов)`);
   }
 
   for (const p of polls) {
@@ -102,7 +141,7 @@ async function run(): Promise<void> {
       if (!q.answer_distribution) continue;
       const remapped: Record<string, number> = {};
       for (const [letter, count] of Object.entries(q.answer_distribution)) {
-      const idx = letterToIndex(String(letter));
+        const idx = letterToIndex(String(letter));
         if (idx !== null) {
           remapped[String(idx)] = count;
         } else {
@@ -119,7 +158,9 @@ async function run(): Promise<void> {
   await writeJson(join(dataDir, 'answers.json'), answers);
   await writeJson(join(dataDir, 'metrics.json'), metrics);
 
-  console.log(`Миграция завершена: ${questions.length} вопросов, ${polls.length} polls, ${answers.length} ответов`);
+  console.log(
+    `Миграция завершена: ${questions.length} вопросов (${migratedMain} переведено), ${polls.length} polls, ${answers.length} ответов`,
+  );
 }
 
 run().catch((err) => {

@@ -65,7 +65,7 @@ describe('buildHostPrompt', () => {
   it('включает топ и серии при наличии', () => {
     const prompt = buildHostPrompt(
       makeContext({
-        results: makeResults([{ userId: '1', selectedOption: 'C', isCorrect: true, points: 3 }]),
+        results: makeResults([{ userId: '1', selectedOption: 2, isCorrect: true, points: 3 }]),
         users: new Map([['1', { id: '1', username: 'ivan', score: 3, currentStreak: 1 } as never]]),
         streakHighlights: [{ userId: '1', currentStreak: 1 }],
         chatStreakRecord: 7,

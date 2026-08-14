@@ -20,7 +20,7 @@ const answerInput = {
   questionId: 'event_000001',
   isCorrect: true,
   reactionTimeMs: 5000,
-  selectedOption: 'C',
+  selectedOption: 2,
   score: 6,
   currentStreak: 2,
   bestStreak: 2,
@@ -116,13 +116,13 @@ describe('metrics store', () => {
 
   it('chat-метрики: активные игроки и распределение ответов вопроса', async () => {
     const { metrics } = await makeStore();
-    await metrics.recordAnswer({ ...answerInput, userId: '1', selectedOption: 'C' });
-    await metrics.recordAnswer({ ...answerInput, userId: '2', selectedOption: 'A', isCorrect: false });
+    await metrics.recordAnswer({ ...answerInput, userId: '1', selectedOption: 2 });
+    await metrics.recordAnswer({ ...answerInput, userId: '2', selectedOption: 0, isCorrect: false });
 
     const snap = await metrics.snapshot();
     expect(snap.chats['-100123']!.active_players).toBe(2);
     expect(snap.questions['event_000001']!.times_answered).toBe(2);
-    expect(snap.questions['event_000001']!.answer_distribution).toEqual({ C: 1, A: 1 });
+    expect(snap.questions['event_000001']!.answer_distribution).toEqual({ '0': 1, '2': 1 });
     expect(snap.questions['event_000001']!.correct_rate).toBe(0.5);
   });
 

@@ -39,7 +39,7 @@ function makeActivePoll(
     chatId,
     questionId: 'event_000001',
     messageId: 1,
-    optionMap: ['A', 'B', 'C', 'D'],
+    optionMap: [0, 1, 2, 3],
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + (opts.expiresInMs ?? 60_000)).toISOString(),
     status: 'active',
