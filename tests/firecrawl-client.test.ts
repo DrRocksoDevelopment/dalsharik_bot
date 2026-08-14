@@ -36,7 +36,14 @@ describe('FirecrawlHttpClient', () => {
     fetchFn.mockResolvedValue(
       jsonResponse({
         success: true,
-        data: [{ url: 'https://example.com', title: 'Пример', markdown: 'Текст' }],
+        data: [
+          {
+            url: 'https://example.com',
+            title: 'Пример',
+            markdown: 'Текст',
+            json: { facts: [{ fact: 'Факт', sourceUrl: 'https://example.com' }] },
+          },
+        ],
       }),
     );
     const client = createFirecrawlClient(
@@ -52,13 +59,22 @@ describe('FirecrawlHttpClient', () => {
     expect(headers.get('Content-Type')).toBe('application/json');
     const body = JSON.parse(init.body as string);
     expect(body).toMatchObject({ query: 'историческое событие', limit: 3 });
-    expect(body.scrapeOptions.formats).toContain('markdown');
-    expect(pages).toEqual([{ title: 'Пример', url: 'https://example.com', markdown: 'Текст' }]);
+    expect(body.scrapeOptions.formats[0]).toBe('markdown');
+    expect(body.scrapeOptions.formats[1]).toMatchObject({ type: 'json' });
+    expect(pages).toEqual([
+      {
+        title: 'Пример',
+        url: 'https://example.com',
+        markdown: 'Текст',
+        description: null,
+        facts: [{ fact: 'Факт', sourceUrl: 'https://example.com' }],
+      },
+    ]);
     expect(client.mode).toBe('cloud');
   });
 
   it('локально: шлёт запрос без Authorization', async () => {
-    fetchFn.mockResolvedValue(jsonResponse({ data: [] }));
+    fetchFn.mockResolvedValue(jsonResponse({ data: { web: [] } }));
     const client = createFirecrawlClient('http://localhost:3002', null) as FirecrawlHttpClient;
     await client.search('запрос');
 
@@ -68,22 +84,62 @@ describe('FirecrawlHttpClient', () => {
     expect(client.mode).toBe('local');
   });
 
-  it('отбрасывает записи без URL, оставляет остальные как есть', async () => {
+  it('понимает новый формат data.web', async () => {
     fetchFn.mockResolvedValue(
       jsonResponse({
-        data: [
-          { url: 'https://a.com', markdown: 'ok' },
-          { url: '', markdown: 'no url' },
-          { title: 'no url at all' },
-          { url: 'https://b.com', markdown: null },
-        ],
+        success: true,
+        data: {
+          web: [
+            {
+              url: 'https://web.com',
+              title: 'Web',
+              markdown: 'md',
+              description: 'desc',
+              json: { facts: [{ fact: 'Ф1', sourceUrl: 'https://web.com' }] },
+            },
+          ],
+        },
       }),
     );
     const client = createFirecrawlClient('http://localhost:3002', null) as FirecrawlHttpClient;
     const pages = await client.search('q');
     expect(pages).toEqual([
-      { title: null, url: 'https://a.com', markdown: 'ok' },
-      { title: null, url: 'https://b.com', markdown: null },
+      {
+        title: 'Web',
+        url: 'https://web.com',
+        markdown: 'md',
+        description: 'desc',
+        facts: [{ fact: 'Ф1', sourceUrl: 'https://web.com' }],
+      },
+    ]);
+  });
+
+  it('отбрасывает записи без URL, без фактов и описания', async () => {
+    fetchFn.mockResolvedValue(
+      jsonResponse({
+        data: {
+          web: [
+            { url: 'https://a.com', markdown: 'ok' },
+            { url: '', markdown: 'no url' },
+            { title: 'no url at all' },
+            { url: 'https://b.com', markdown: null },
+            { url: 'https://c.com', json: { facts: [{ fact: 'Ф', sourceUrl: 'https://c.com' }] } },
+          ],
+        },
+      }),
+    );
+    const client = createFirecrawlClient('http://localhost:3002', null) as FirecrawlHttpClient;
+    const pages = await client.search('q');
+    expect(pages).toEqual([
+      { title: null, url: 'https://a.com', markdown: 'ok', description: null, facts: [] },
+      { title: null, url: 'https://b.com', markdown: null, description: null, facts: [] },
+      {
+        title: null,
+        url: 'https://c.com',
+        markdown: null,
+        description: null,
+        facts: [{ fact: 'Ф', sourceUrl: 'https://c.com' }],
+      },
     ]);
   });
 

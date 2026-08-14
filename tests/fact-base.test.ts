@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { buildFactBase } from '../src/ai/fact-base.js';
 import type { FactPage } from '../src/ai/firecrawl-client.js';
 
-function page(url: string, markdown: string, title?: string): FactPage {
-  return { url, markdown, title: title ?? null };
+function page(
+  url: string,
+  markdown: string,
+  title?: string,
+  extra: Partial<Omit<FactPage, 'url' | 'markdown' | 'title'>> = {},
+): FactPage {
+  return { url, markdown, title: title ?? null, description: null, facts: [], ...extra };
 }
 
 describe('buildFactBase', () => {
@@ -48,5 +53,28 @@ describe('buildFactBase', () => {
     );
     expect(base).toContain('A'.repeat(500));
     expect(base).not.toContain('https://b.com');
+  });
+
+  it('LLM-факты имеют приоритет над markdown', () => {
+    const base = buildFactBase([
+      page('https://a.com', 'Мусорный markdown', 'Заголовок', {
+        facts: [
+          { fact: 'Первый факт с датой', sourceUrl: 'https://a.com' },
+          { fact: 'Второй факт', sourceUrl: 'https://a.com' },
+        ],
+      }),
+    ]);
+    expect(base).toContain('Первый факт с датой');
+    expect(base).toContain('Второй факт');
+    expect(base).not.toContain('Мусорный markdown');
+  });
+
+  it('description — фолбэк, если фактов нет', () => {
+    const base = buildFactBase([
+      page('https://a.com', '', 'Заголовок', {
+        description: 'Короткое описание из поиска',
+      }),
+    ]);
+    expect(base).toContain('Короткое описание из поиска');
   });
 });

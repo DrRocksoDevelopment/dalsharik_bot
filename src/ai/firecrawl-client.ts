@@ -2,12 +2,14 @@ import type { Logger } from 'winston';
 
 export const FIRECRAWL_CLOUD_BASE = 'https://api.firecrawl.dev';
 export const FIRECRAWL_DEFAULT_BASE = 'http://localhost:3002';
-const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 300_000;
 
 export interface FactPage {
   title: string | null;
   url: string;
   markdown: string | null;
+  description: string | null;
+  facts: { fact: string; sourceUrl: string }[];
 }
 
 export interface FirecrawlSearchOptions {
@@ -39,6 +41,30 @@ export interface FirecrawlClient {
   search(query: string, options?: FirecrawlSearchOptions): Promise<FactPage[]>;
 }
 
+const FACTS_SCHEMA = {
+  type: 'object',
+  properties: {
+    facts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          fact: { type: 'string', description: 'Факт о событии с датой' },
+          sourceUrl: { type: 'string', description: 'URL-источник факта' },
+        },
+      },
+    },
+  },
+};
+
+interface SearchWebItem {
+  url?: string;
+  title?: string | null;
+  markdown?: string | null;
+  description?: string | null;
+  json?: { facts?: Array<{ fact?: string; sourceUrl?: string }> };
+}
+
 export class FirecrawlHttpClient implements FirecrawlClient {
   readonly baseUrl: string;
   readonly mode: 'cloud' | 'local';
@@ -61,7 +87,7 @@ export class FirecrawlHttpClient implements FirecrawlClient {
     const body: Record<string, unknown> = {
       query,
       limit,
-      scrapeOptions: { formats: ['markdown'] },
+      scrapeOptions: { formats: ['markdown', { type: 'json', schema: FACTS_SCHEMA }] },
     };
     if (options?.categories?.length) body.categories = options.categories;
     if (options?.sources?.length) body.sources = options.sources;
@@ -71,18 +97,28 @@ export class FirecrawlHttpClient implements FirecrawlClient {
       body: JSON.stringify(body),
     })) as {
       success?: boolean;
-      data?: Array<{ url?: string; title?: string | null; markdown?: string | null }>;
+      data?: SearchWebItem[] | { web?: SearchWebItem[] } | null;
     };
 
-    const items = Array.isArray(data.data) ? data.data : [];
-    const pages = items
-      .filter((item): item is { url: string; title?: string | null; markdown?: string | null } =>
+    const raw = Array.isArray(data.data)
+      ? data.data
+      : Array.isArray(data.data?.web)
+        ? data.data.web
+        : [];
+    const pages = raw
+      .filter((item): item is SearchWebItem & { url: string } =>
         typeof item.url === 'string' && item.url !== '',
       )
       .map((item) => ({
         title: item.title ?? null,
         url: item.url,
         markdown: item.markdown ?? null,
+        description: item.description ?? null,
+        facts: (item.json?.facts ?? [])
+          .filter((f): f is { fact: string; sourceUrl: string } =>
+            typeof f.fact === 'string' && typeof f.sourceUrl === 'string',
+          )
+          .map((f) => ({ fact: f.fact, sourceUrl: f.sourceUrl })),
       }));
 
     this.logger?.debug('Firecrawl: поиск завершён', {
@@ -90,6 +126,7 @@ export class FirecrawlHttpClient implements FirecrawlClient {
       baseUrl: this.baseUrl,
       mode: this.mode,
       results: pages.length,
+      withFacts: pages.filter((p) => p.facts.length > 0).length,
     });
     return pages;
   }
@@ -108,6 +145,7 @@ export class FirecrawlHttpClient implements FirecrawlClient {
         headers,
       });
     } catch (err) {
+      clearTimeout(timer);
       const aborted = err instanceof Error && err.name === 'AbortError';
       throw new FirecrawlError(
         null,
@@ -115,15 +153,26 @@ export class FirecrawlHttpClient implements FirecrawlClient {
           ? `таймаут запроса к Firecrawl (${Math.round(this.timeoutMs / 1000)} c)`
           : `Firecrawl недоступен: ${err instanceof Error ? err.message : String(err)}`,
       );
+    }
+
+    try {
+      if (!response.ok) {
+        const bodyText = await response.text().catch(() => '');
+        throw new FirecrawlError(response.status, this.errorForStatus(response.status, bodyText));
+      }
+      return (await response.json()) as Promise<unknown>;
+    } catch (err) {
+      if (err instanceof FirecrawlError) throw err;
+      const aborted = err instanceof Error && err.name === 'AbortError';
+      throw new FirecrawlError(
+        null,
+        aborted
+          ? `таймаут чтения ответа Firecrawl (${Math.round(this.timeoutMs / 1000)} c)`
+          : `Firecrawl не вернул тело: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       clearTimeout(timer);
     }
-
-    if (!response.ok) {
-      const bodyText = await response.text().catch(() => '');
-      throw new FirecrawlError(response.status, this.errorForStatus(response.status, bodyText));
-    }
-    return response.json() as Promise<unknown>;
   }
 
   private errorForStatus(status: number, body: string): string {
@@ -142,6 +191,7 @@ export class FirecrawlHttpClient implements FirecrawlClient {
 export function createFirecrawlClient(
   baseUrl: string,
   apiKey?: string | null,
+  timeoutMs?: number,
 ): FirecrawlClient {
-  return new FirecrawlHttpClient({ baseUrl, apiKey });
+  return new FirecrawlHttpClient({ baseUrl, apiKey, timeoutMs });
 }
