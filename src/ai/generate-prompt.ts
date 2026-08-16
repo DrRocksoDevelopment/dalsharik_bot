@@ -6,6 +6,7 @@ export interface BuildGenerationPromptOptions {
   category: Category | null;
   existingTexts: string[];
   factBase?: string;
+  alreadyGenerated?: string[];
 }
 
 export const DEFAULT_GENERATION_PROMPT = `Ты — генератор вопросов для Telegram-викторины «Что было дальше?» (Dalsharik). Твоя задача — создавать новые вопросы по реальным событиям.
@@ -95,9 +96,14 @@ export function buildGenerationPrompt(
           .join('\n')}`
       : '';
   const factBase = opts.factBase ? `\n\n${opts.factBase}` : '';
+  const already = opts.alreadyGenerated?.length
+    ? `\nТы уже сгенерировал ${opts.alreadyGenerated.length} вопросов в этой сессии (не повторяй их):\n${opts.alreadyGenerated
+        .map((t) => `- ${t}`)
+        .join('\n')}`
+    : '';
 
   return `${instruction}
 
 ${categoryLine}
-${countLine}${blacklist}${factBase}`;
+${countLine}${blacklist}${already}${factBase}`;
 }

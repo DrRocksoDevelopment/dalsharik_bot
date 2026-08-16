@@ -55,6 +55,7 @@ describe('loadEnv', () => {
       firecrawlApiKey: 'fc-test',
       firecrawlBaseUrl: 'http://localhost:3002',
       firecrawlTimeoutMs: 300000,
+      handlerTimeoutMs: 1800000,
     });
   });
 
@@ -74,6 +75,7 @@ describe('loadEnv', () => {
       firecrawlApiKey: null,
       firecrawlBaseUrl: 'http://localhost:3002',
       firecrawlTimeoutMs: 300000,
+      handlerTimeoutMs: 1800000,
     });
   });
 
@@ -90,6 +92,16 @@ describe('loadEnv', () => {
     process.env.LOG_CHAT_ID = '  -100123  ';
     expect(loadEnv().botToken).toBe('123:token');
     expect(loadEnv().logChatId).toBe('-100123');
+  });
+
+  it('читает HANDLER_TIMEOUT_MS и некорректное значение заменяет дефолтом', () => {
+    for (const key of ENV_KEYS) delete process.env[key];
+    process.env.BOT_TOKEN = '123:token';
+    process.env.HANDLER_TIMEOUT_MS = '300000';
+    expect(loadEnv().handlerTimeoutMs).toBe(300000);
+
+    process.env.HANDLER_TIMEOUT_MS = 'abc';
+    expect(loadEnv().handlerTimeoutMs).toBe(1800000);
   });
 
   it('без BOT_TOKEN выбрасывает ошибку', () => {

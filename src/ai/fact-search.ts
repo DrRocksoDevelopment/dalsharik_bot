@@ -321,27 +321,63 @@ async function withConcurrency<T>(items: T[], concurrency: number, run: (item: T
   await Promise.all(workers);
 }
 
+export interface FactSearchProgress {
+  done: number;
+  total: number;
+  topicTitle: string;
+  topicPages: number;
+  totalPages: number;
+  failed: number;
+}
+
+export interface SearchFactPagesOptions {
+  limit?: number;
+  concurrency?: number;
+  onProgress?: (progress: FactSearchProgress) => void | Promise<void>;
+}
+
 export async function searchFactPages(
   firecrawl: FirecrawlClient,
   topics: TopicCandidate[],
-  options?: { limit?: number; concurrency?: number },
-): Promise<{ pages: FactPage[]; searched: number }> {
+  options?: SearchFactPagesOptions,
+): Promise<{
+  pages: FactPage[];
+  searched: number;
+  byTopic: { topic: TopicCandidate; pages: FactPage[] }[];
+}> {
   const limit = options?.limit ?? DEFAULT_SEARCH_LIMIT;
   const concurrency = options?.concurrency ?? DEFAULT_CONCURRENCY;
   const pages: FactPage[] = [];
+  const byTopic: { topic: TopicCandidate; pages: FactPage[] }[] = [];
   let searched = 0;
+  let done = 0;
+  let failed = 0;
   await withConcurrency(topics, concurrency, async (topic) => {
+    const topicPages: FactPage[] = [];
+    const pagesBefore = pages.length;
     try {
       const found = await firecrawl.search(topic.query, { limit });
       searched += 1;
       for (const page of found) {
-        if (page.facts.length > 0 || page.description || page.markdown) pages.push(page);
+        if (page.facts.length > 0 || page.description || page.markdown) {
+          pages.push(page);
+          topicPages.push(page);
+        }
       }
     } catch {
-      // Ошибка отдельного поиска не роняет весь факт-пак: считаем поиск выполненным,
-      // страницы не добавляем — итоговый сбой обработается на уровне пустого факт-база.
       searched += 1;
+      failed += 1;
     }
+    byTopic.push({ topic, pages: topicPages });
+    done += 1;
+    await options?.onProgress?.({
+      done,
+      total: topics.length,
+      topicTitle: topic.title,
+      topicPages: pages.length - pagesBefore,
+      totalPages: pages.length,
+      failed,
+    });
   });
-  return { pages, searched };
+  return { pages, searched, byTopic };
 }

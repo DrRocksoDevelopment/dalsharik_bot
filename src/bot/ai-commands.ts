@@ -21,7 +21,13 @@ import {
 } from '../ai/used-topics.js';
 import { buildGenerationPrompt, DEFAULT_GENERATION_PROMPT } from '../ai/generate-prompt.js';
 import { normalizeGenerated } from '../ai/normalize-generated.js';
-import { AI_SETTINGS_ID, type AiSettingsRecord, type GenerationUsage } from '../ai/types.js';
+import {
+  AI_SETTINGS_ID,
+  type AiSettingsRecord,
+  type GenerationUsage,
+  type NormalizedGeneration,
+} from '../ai/types.js';
+import type { Question } from '../game/question.js';
 import { DEFAULT_HOST_PROMPT } from '../game/show/host.js';
 import type { MetricsStore } from '../metrics/metrics.js';
 import {
@@ -29,7 +35,7 @@ import {
   buildQuestionReviewText,
 } from './moderation-commands.js';
 
-const DEFAULT_COUNT = 10;
+const DEFAULT_COUNT = 5;
 const MAX_COUNT = 25;
 const MAX_REVIEW_CARDS = 10;
 const MAX_HOST_PROMPT_LENGTH = 3000;
@@ -83,6 +89,11 @@ async function saveSettings(store: DataStore, patch: Partial<AiSettingsRecord>):
 
 function maskKey(key: string): string {
   return key.length > 8 ? `${key.slice(0, 8)}…` : '•••';
+}
+
+function preview(text: string, max = 400): string {
+  const t = text.trim().replace(/\s+/g, ' ');
+  return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
 export interface FirecrawlConfig {
@@ -480,7 +491,9 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
       });
       const topics = parseTopics(topicsResult.rawText);
       if (!topics.ok) {
-        await ctx.reply(MESSAGES.aiGenerateError(topics.reason, topicsResult.usage));
+        await ctx.reply(
+          `${MESSAGES.aiGenerateError(topics.reason, topicsResult.usage)}\n\n${MESSAGES.aiGenerateModelReply(preview(topicsResult.rawText))}`,
+        );
         return;
       }
       const filtered = filterRepeatedTopics(topics.topics, existingTopics);
@@ -498,10 +511,25 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
         skipped: filtered.skipped.length,
         mode: firecrawlConfig.mode,
       });
+      await ctx.reply(MESSAGES.aiGenerateTopicsReady(topics.topics.length, filtered.kept.length, filtered.skipped.length));
 
-      const { pages, searched } = await searchFactPages(firecrawl, filtered.kept);
-      const factBase = buildFactBase(pages);
-      if (!factBase) {
+      const { pages, searched, byTopic } = await searchFactPages(firecrawl, filtered.kept, {
+        onProgress: (p) =>
+          ctx
+            .reply(
+              MESSAGES.aiGenerateFactProgress({
+                done: p.done,
+                total: p.total,
+                title: p.topicTitle,
+                pages: p.topicPages,
+                totalPages: p.totalPages,
+                failed: p.failed,
+              }),
+            )
+            .then(() => undefined),
+      });
+      const totalFactBase = buildFactBase(pages);
+      if (!totalFactBase) {
         await ctx.reply(
           MESSAGES.aiGenerateError(
             `Firecrawl (${firecrawlConfig.baseUrl}) не вернул ни одной страницы с содержимым. Проверь, что инстанс запущен${firecrawlConfig.apiKey ? '' : ' и настроен адрес локального инстанса (/set_firecrawl_url)'}.`,
@@ -510,53 +538,90 @@ export function registerAiCommands(bot: Telegraf, deps: AiCommandsDeps): void {
         );
         return;
       }
+      await ctx.reply(MESSAGES.aiGenerateFactsReady(pages.length, searched));
 
-      const prompt = buildGenerationPrompt(
-        {
-          count: parsed.count,
-          category: parsed.category,
-          existingTexts,
-          factBase,
-        },
-        settings?.generatePrompt ?? DEFAULT_GENERATION_PROMPT,
-      );
-      const { rawText, usage } = await client.generate(prompt, {
-        webSearch: false,
-        jsonObject: true,
-        reasoning: { enabled: false },
-        maxTokens: GENERATION_MAX_TOKENS,
-      });
+      let questionsUsage: GenerationUsage | null = null;
+      const questions: Question[] = [];
+      let rejected: NormalizedGeneration['rejected'] = [];
+      const usedIds = [...existingIds];
+      const usedTexts = [...existingTexts];
+      const usedTopics = [...existingTopics];
+
+      for (let i = 0; i < byTopic.length; i++) {
+        const { topic, pages: topicPages } = byTopic[i]!;
+        const topicFactBase = buildFactBase(topicPages);
+        if (!topicFactBase) {
+          await ctx.reply(MESSAGES.aiGenerateError(`Нет фактов для темы «${topic.title}» — пропускаю.`, null));
+          continue;
+        }
+        await ctx.reply(MESSAGES.aiGenerateQuestionProgress(i + 1, byTopic.length, topic.title));
+
+        const prompt = buildGenerationPrompt(
+          {
+            count: 1,
+            category: parsed.category,
+            existingTexts: usedTexts,
+            factBase: topicFactBase,
+            alreadyGenerated: questions.map((q) => q.question),
+          },
+          settings?.generatePrompt ?? DEFAULT_GENERATION_PROMPT,
+        );
+        const { rawText, usage } = await client.generate(prompt, {
+          webSearch: false,
+          jsonObject: true,
+          reasoning: { enabled: false },
+          maxTokens: GENERATION_MAX_TOKENS,
+        });
+        questionsUsage = questionsUsage ? sumUsage(questionsUsage, usage) : usage;
+        const normalized = normalizeGenerated(rawText, {
+          existingIds: usedIds,
+          existingTexts: usedTexts,
+          existingTopics: usedTopics,
+        });
+        if (!normalized.ok) {
+          await ctx.reply(
+            `${MESSAGES.aiGenerateError(normalized.reason, usage)}\n\n${MESSAGES.aiGenerateModelReply(preview(rawText))}`,
+          );
+          continue;
+        }
+        for (const q of normalized.questions) {
+          usedIds.push(q.id);
+          usedTexts.push(q.question);
+          usedTopics.push(q.event.title);
+          questions.push(q);
+          await deps.store.pendingQuestions.insert(q);
+          await ctx.reply(buildQuestionReviewText(q), buildQuestionReviewKeyboard(q.id));
+          await ctx.reply(MESSAGES.aiGenerateQuestionDone(i + 1, byTopic.length, topic.title));
+        }
+        rejected = rejected.concat(normalized.rejected);
+      }
+
       const combinedUsage = sumUsage(topicsResult.usage, {
-        ...usage,
+        ...(questionsUsage ?? {
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          totalCostCredits: undefined,
+          estimatedCostUsd: 0,
+          inferenceCostUsd: 0,
+          searchCostUsd: 0,
+        }),
         webSearchRequests: searched,
       });
       await deps.metrics?.recordAiUsage({ kind: 'generate', ...combinedUsage });
-      const normalized = normalizeGenerated(rawText, {
-        existingIds,
-        existingTexts,
-        existingTopics,
-      });
 
-      if (!normalized.ok) {
-        await ctx.reply(MESSAGES.aiGenerateError(normalized.reason, combinedUsage));
-        return;
-      }
-
-      for (const q of normalized.questions) {
-        await deps.store.pendingQuestions.insert(q);
-      }
-      for (const q of normalized.questions.slice(0, MAX_REVIEW_CARDS)) {
-        await ctx.reply(buildQuestionReviewText(q), buildQuestionReviewKeyboard(q.id));
-      }
       await ctx.reply(
         MESSAGES.aiGenerateReport({
-          total: normalized.questions.length + normalized.rejected.length,
-          valid: normalized.questions.length,
-          rejectedCount: normalized.rejected.length,
-          rejected: normalized.rejected,
+          total: questions.length + rejected.length,
+          valid: questions.length,
+          rejectedCount: rejected.length,
+          rejected,
           usage: combinedUsage,
         }),
       );
+      if (questions.length < parsed.count) {
+        await ctx.reply(MESSAGES.aiGenerateShortfall(questions.length, parsed.count));
+      }
     } catch (err) {
       deps.logger.error('Ошибка генерации вопросов', {
         error: err instanceof Error ? err.message : String(err),

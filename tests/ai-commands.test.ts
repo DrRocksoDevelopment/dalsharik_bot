@@ -39,8 +39,8 @@ interface SetupOptions {
 }
 
 describe('parseGenerateArgs', () => {
-  it('по умолчанию 10 вопросов без категории', () => {
-    expect(parseGenerateArgs('/generate')).toEqual({ count: 10, category: null });
+  it('по умолчанию 5 вопросов без категории', () => {
+    expect(parseGenerateArgs('/generate')).toEqual({ count: 5, category: null });
   });
 
   it('разбирает количество', () => {
@@ -64,7 +64,7 @@ describe('parseGenerateArgs', () => {
   });
 
   it('all не задаёт категорию', () => {
-    expect(parseGenerateArgs('/generate all')).toEqual({ count: 10, category: null });
+    expect(parseGenerateArgs('/generate all')).toEqual({ count: 5, category: null });
   });
 
   it('неизвестная категория возвращает ошибку', () => {
@@ -142,10 +142,11 @@ describe('registerAiCommands', () => {
 
   function stubClient(rawText = validRawQuestions()) {
     return {
-      generate: vi
-        .fn()
-        .mockResolvedValueOnce({ rawText: validRawTopics(), usage: USAGE })
-        .mockResolvedValueOnce({ rawText, usage: USAGE }),
+      generate: vi.fn().mockImplementation((prompt: string) =>
+        prompt.includes('составитель тем')
+          ? Promise.resolve({ rawText: validRawTopics(), usage: USAGE })
+          : Promise.resolve({ rawText, usage: USAGE }),
+      ),
     } as unknown as OpenRouterClient;
   }
 
@@ -563,8 +564,34 @@ describe('registerAiCommands', () => {
 
     await h.bot.handleUpdate(privateHelp('/generate'));
 
-    expect(lastReply(h)).toContain('Ошибка генерации');
-    expect(lastReply(h)).toContain('невалидный JSON');
+    const texts = h.sendMessage.mock.calls.map((c) => (typeof c[1] === 'string' ? c[1] : ''));
+    expect(texts.some((t) => t.includes('Ошибка генерации') && t.includes('невалидный JSON'))).toBe(true);
+  });
+
+  it('/generate при невалидном JSON показывает превью ответа модели', async () => {
+    const client = stubClient('какой-то мусор от модели без JSON');
+    await setup({ createClient: () => client });
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+
+    await h.bot.handleUpdate(privateHelp('/generate'));
+
+    const texts = h.sendMessage.mock.calls.map((c) => (typeof c[1] === 'string' ? c[1] : ''));
+    expect(texts.some((t) => t.includes('📄 Ответ модели') && t.includes('какой-то мусор от модели без JSON'))).toBe(true);
+  });
+
+  it('/generate шлёт промежуточные статусы: темы и факты', async () => {
+    const client = stubClient();
+    await setup({ createClient: () => client });
+    await saveSettings({ apiKey: 'sk-or-secret-123456', model: 'test/model' });
+
+    await h.bot.handleUpdate(privateHelp('/generate'));
+
+    const texts = h.sendMessage.mock.calls.map((c) => (typeof c[1] === 'string' ? c[1] : ''));
+    expect(texts.some((t) => t.startsWith('🗂 Темы подобраны'))).toBe(true);
+    expect(texts.some((t) => t.startsWith('🔎 Факты собраны'))).toBe(true);
+    expect(texts.some((t) => /^🔎 \[1\/1\]/.test(t))).toBe(true);
+    expect(texts.some((t) => t.includes('Генерация завершена'))).toBe(true);
+    expect(texts.some((t) => /^⚠️ Модель вернула только \d+ из 5/.test(t))).toBe(true);
   });
 
   it('/generate повторный вызов во время генерации отвечает busy', async () => {

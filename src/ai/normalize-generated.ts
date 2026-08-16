@@ -27,6 +27,12 @@ export function parseGeneratedText(
   if (Array.isArray(parsed)) return { ok: true, list: parsed };
   const wrapped = (parsed as { questions?: unknown } | null)?.questions;
   if (Array.isArray(wrapped)) return { ok: true, list: wrapped };
+  if (parsed !== null && typeof parsed === 'object') {
+    const rec = parsed as Record<string, unknown>;
+    if (typeof rec.question === 'string' && Array.isArray(rec.answers)) {
+      return { ok: true, list: [rec] };
+    }
+  }
   return { ok: false, reason: 'ожидался массив вопросов или объект с полем "questions"' };
 }
 

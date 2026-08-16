@@ -13,6 +13,7 @@ export interface BotDeps {
   logger: Logger;
   store: DataStore;
   adminId: number | null;
+  handlerTimeoutMs?: number;
   pollAnswerHandler?: (pollAnswer: PollAnswer, updateId: number) => Promise<void>;
   onChatChanged?: (chatId: string) => Promise<void>;
   ensureScheduled?: (chatId: string) => Promise<void>;
@@ -20,7 +21,8 @@ export interface BotDeps {
 }
 
 export function createBot(token: string, deps: BotDeps, botInstance?: Telegraf): Telegraf {
-  const bot = botInstance ?? new Telegraf(token);
+  const bot =
+    botInstance ?? new Telegraf(token, { handlerTimeout: deps.handlerTimeoutMs });
 
   bot.use((ctx, next) => {
     const chat = ctx.chat?.id?.toString();

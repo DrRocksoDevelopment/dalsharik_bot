@@ -49,6 +49,7 @@ export async function main(): Promise<void> {
     logger,
     store,
     adminId: env.botAdminId,
+    handlerTimeoutMs: env.handlerTimeoutMs,
     pollAnswerHandler: (pollAnswer, updateId) =>
       processPollAnswer(pollAnswer, updateId, { logger, store }),
     onChatChanged: (chatId) => scheduler?.scheduleChat(chatId) ?? Promise.resolve(),

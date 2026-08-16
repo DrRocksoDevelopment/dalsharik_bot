@@ -163,4 +163,48 @@ describe('searchFactPages', () => {
     expect(searched).toBe(2);
     expect(pages).toHaveLength(1);
   });
+
+  it('onProgress вызывается после каждой темы с накопленным числом', async () => {
+    const fc = stubFirecrawl({
+      'тема 1': [page('https://a.com', 'факты A')],
+      'тема 2': [page('https://b.com', 'факты B')],
+    });
+    const progress: Array<{ done: number; total: number; pages: number }> = [];
+    await searchFactPages(
+      fc,
+      [
+        { title: 'Т1', query: 'тема 1' },
+        { title: 'Т2', query: 'тема 2' },
+      ],
+      {
+        concurrency: 1,
+        onProgress: (p) => {
+          progress.push({ done: p.done, total: p.total, pages: p.totalPages });
+        },
+      },
+    );
+    expect(progress).toEqual([
+      { done: 1, total: 2, pages: 1 },
+      { done: 2, total: 2, pages: 2 },
+    ]);
+  });
+
+  it('onProgress помечает неудачные темы', async () => {
+    const fc = stubFirecrawl({ 'тема 2': [page('https://b.com', 'факты B')] }, new Set(['тема 1']));
+    const failed: number[] = [];
+    await searchFactPages(
+      fc,
+      [
+        { title: 'Т1', query: 'тема 1' },
+        { title: 'Т2', query: 'тема 2' },
+      ],
+      {
+        concurrency: 1,
+        onProgress: (p) => {
+          failed.push(p.failed);
+        },
+      },
+    );
+    expect(failed).toEqual([1, 1]);
+  });
 });

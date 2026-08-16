@@ -37,6 +37,12 @@ describe('parseGeneratedText', () => {
     if (r.ok) expect(r.list).toHaveLength(1);
   });
 
+  it('разбирает одиночный объект вопроса как массив из одного', () => {
+    const r = parseGeneratedText(JSON.stringify(rawValid));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.list).toHaveLength(1);
+  });
+
   it('срезает markdown-обёртку ```json', () => {
     const r = parseGeneratedText('```json\n' + JSON.stringify([rawValid]) + '\n```');
     expect(r.ok).toBe(true);
@@ -138,6 +144,15 @@ describe('normalizeGenerated', () => {
       expect(res.questions).toHaveLength(2);
       expect(res.questions[0]!.id).toBe('event_000011');
       expect(res.questions[1]!.id).toBe('event_000012');
+    }
+  });
+
+  it('нормализует одиночный объект вопроса', () => {
+    const res = normalizeGenerated(JSON.stringify(rawValid), { existingIds: [], existingTexts: [], now });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.questions).toHaveLength(1);
+      expect(res.questions[0]!.id).toBe('event_000001');
     }
   });
 

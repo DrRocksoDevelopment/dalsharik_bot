@@ -13,6 +13,7 @@ export interface EnvConfig {
   firecrawlApiKey: string | null;
   firecrawlBaseUrl: string;
   firecrawlTimeoutMs: number;
+  handlerTimeoutMs: number;
 }
 
 function required(name: string): string {
@@ -54,5 +55,6 @@ export function loadEnv(): EnvConfig {
     firecrawlApiKey: optional('FIRECRAWL_API_KEY'),
     firecrawlBaseUrl: process.env.FIRECRAWL_BASE_URL?.trim() || 'http://localhost:3002',
     firecrawlTimeoutMs: optionalInt('FIRECRAWL_TIMEOUT_MS', 300_000),
+    handlerTimeoutMs: optionalInt('HANDLER_TIMEOUT_MS', 1_800_000),
   };
 }
