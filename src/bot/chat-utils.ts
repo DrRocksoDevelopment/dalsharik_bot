@@ -36,6 +36,14 @@ export function normalizeChatConfig(cfg: ChatConfig): ChatConfig {
     finalization: cfg.finalization === 'static' ? 'static' : 'ai',
     subscription:
       typeof cfg.subscription === 'boolean' ? cfg.subscription : defaults.subscription,
+    quietHoursEnabled:
+      typeof cfg.quietHoursEnabled === 'boolean'
+        ? cfg.quietHoursEnabled
+        : defaults.quietHoursEnabled,
+    quietHoursStart:
+      typeof cfg.quietHoursStart === 'number' ? cfg.quietHoursStart : defaults.quietHoursStart,
+    quietHoursEnd:
+      typeof cfg.quietHoursEnd === 'number' ? cfg.quietHoursEnd : defaults.quietHoursEnd,
   };
 }
 
@@ -64,6 +72,15 @@ export async function getOrCreateChat(
     }
     if (record.subscription !== existing.subscription) {
       patch.subscription = record.subscription;
+    }
+    if (record.quietHoursEnabled !== existing.quietHoursEnabled) {
+      patch.quietHoursEnabled = record.quietHoursEnabled;
+    }
+    if (record.quietHoursStart !== existing.quietHoursStart) {
+      patch.quietHoursStart = record.quietHoursStart;
+    }
+    if (record.quietHoursEnd !== existing.quietHoursEnd) {
+      patch.quietHoursEnd = record.quietHoursEnd;
     }
     if (Object.keys(patch).length > 1) {
       await store.chats.mutate((items) => {

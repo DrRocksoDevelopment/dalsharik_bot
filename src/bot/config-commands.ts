@@ -16,6 +16,19 @@ export interface ConfigCommandsDeps {
 
 const ADMIN_MIN_SECONDS = 60;
 
+function parseClockTime(input: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(input.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function formatClockTime(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
 function minSecondsFor(ctx: { from?: { id?: number } | null }, deps: ConfigCommandsDeps): number {
   return ctx.from?.id === deps.adminId ? 1 : ADMIN_MIN_SECONDS;
 }
@@ -172,5 +185,41 @@ export function registerConfigCommands(bot: Telegraf, deps: ConfigCommandsDeps):
         value === 'ai' ? 'AI-ведущий' : 'статичная карточка',
       ),
     );
+  });
+
+  bot.command('set_quiet_hours', async (ctx) => {
+    const chatId = ctx.chat?.id.toString();
+    if (!chatId || !isGroupChat(ctx.chat?.type)) return;
+    if (!(await isChatAdminOrSuper(ctx, deps.adminId, deps.logger))) {
+      await ctx.reply(MESSAGES.notAdmin);
+      return;
+    }
+    const parts = ctx.message.text.split(/\s+/).slice(1);
+    const now = new Date().toISOString();
+    if (parts[0] === 'off') {
+      await deps.store.chats.update(chatId, {
+        quietHoursEnabled: false,
+        updatedAt: now,
+      });
+      deps.logger.info('Тихие часы выключены', { chatId });
+      await deps.onChatChanged?.(chatId);
+      await ctx.reply(MESSAGES.quietHoursOff);
+      return;
+    }
+    const start = parts[0] === undefined ? null : parseClockTime(parts[0]);
+    const end = parts[1] === undefined ? null : parseClockTime(parts[1]);
+    if (start === null || end === null || start === end) {
+      await ctx.reply(MESSAGES.invalidQuietHours);
+      return;
+    }
+    await deps.store.chats.update(chatId, {
+      quietHoursEnabled: true,
+      quietHoursStart: start,
+      quietHoursEnd: end,
+      updatedAt: now,
+    });
+    deps.logger.info('Установлены тихие часы', { chatId, start, end });
+    await deps.onChatChanged?.(chatId);
+    await ctx.reply(MESSAGES.quietHoursSet(`${formatClockTime(start)}–${formatClockTime(end)}`));
   });
 }

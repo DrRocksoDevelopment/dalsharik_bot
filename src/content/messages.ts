@@ -75,6 +75,10 @@ export const MESSAGES = {
   invalidDifficultyRange: '❌ Сложность должна быть от 1 до 5, мин ≤ макс.',
   invalidTimeZone:
     '❌ Неверный часовой пояс. Формат: /set_timezone ±Ч[:ММ], от −12 до +14. Примеры: +3, -5, +5:30.',
+  invalidQuietHours:
+    '❌ Неверные тихие часы. Формат: /set_quiet_hours ЧЧ:ММ ЧЧ:ММ или /set_quiet_hours off',
+  quietHoursSet: (range: string) => `⚙️ Тихие часы: ${range}. В это время бот не публикует вопросы.`,
+  quietHoursOff: '⚙️ Тихие часы выключены. Бот публикует круглосуточно.',
   invalidFinalization:
     '❌ Неверный режим финализации. Допустимые: ai, static. Пример: /set_finalization ai',
   notAdmin: '❌ Эта команда доступна только администраторам (группы или бота).',
@@ -293,6 +297,19 @@ export const MESSAGES = {
     `❌ Инструкция слишком длинная (максимум ${max} символов).`,
   aiGenerateStarted: (count: number, category: string) =>
     `🤖 Генерирую ${count} вопросов${category}…\nПодбираю темы, проверяю факты и источники через Firecrawl.\nЭто может занять 30–120 секунд.`,
+  aiGenerateTopicsReady: (total: number, kept: number, skipped: number) =>
+    `🗂 Темы подобраны: ${kept} из ${total}${skipped > 0 ? ` (пропущено повторов: ${skipped})` : ''}.\n🔎 Ищу факты и источники через Firecrawl…`,
+  aiGenerateFactsReady: (pages: number, searched: number) =>
+    `🔎 Факты собраны: ${pages} страниц из ${searched} поисков.\n🧠 Генерирую вопросы…`,
+  aiGenerateQuestionProgress: (index: number, total: number, title: string) =>
+    `🧠 [${index}/${total}] Генерирую вопрос: «${title}»…`,
+  aiGenerateQuestionDone: (index: number, total: number, title: string) =>
+    `✅ [${index}/${total}] «${title}» — вопрос готов.`,
+  aiGenerateFactProgress: (p: { done: number; total: number; title: string; pages: number; totalPages: number; failed: number }) =>
+    `🔎 [${p.done}/${p.total}] «${p.title}» — ${p.pages} стр.${p.failed > 0 ? ` (неудач: ${p.failed})` : ''} (всего ${p.totalPages})`,
+  aiGenerateModelReply: (preview: string) => `📄 Ответ модели:\n${preview}`,
+  aiGenerateShortfall: (got: number, wanted: number) =>
+    `⚠️ Модель вернула только ${got} из ${wanted} — недостающие не сгенерированы. Запусти /generate ещё раз.`,
   aiGenerateError: (reason: string, usage: UsageSummary | null) => {
     const cost = usage ? `\n\n${formatUsage(usage)}` : '';
     return `❌ Ошибка генерации: ${reason}${cost}`;

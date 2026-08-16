@@ -25,6 +25,21 @@ export function formatLocalTime(nowMs: number, offsetMinutes: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+export function localMinutesFromUtc(nowMs: number, offsetMinutes: number): number {
+  return (((Math.floor(nowMs / 60000) % 1440) + offsetMinutes) % 1440 + 1440) % 1440;
+}
+
+export function isInInterval(minutes: number, start: number, end: number): boolean {
+  if (start === end) return false;
+  return start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
+}
+
+export function minutesUntilIntervalEnd(minutes: number, start: number, end: number): number {
+  if (!isInInterval(minutes, start, end)) return 0;
+  if (start < end) return end - minutes;
+  return minutes < end ? end - minutes : 1440 - minutes + end;
+}
+
 export function formatRelativeDuration(ms: number): string {
   if (ms < 60_000) return 'меньше минуты';
   const totalMinutes = Math.floor(ms / 60_000);

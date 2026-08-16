@@ -3,6 +3,7 @@ import type { DataStore } from '../storage/data-store.js';
 import type { PollRecord } from '../game/poll.js';
 import type { ChatConfig } from '../types/index.js';
 import type { ChatRecord } from '../game/chat.js';
+import { localMinutesFromUtc, minutesUntilIntervalEnd } from '../utils/timezone.js';
 
 export interface PollPublisher {
   publish(chat: ChatConfig): Promise<PollRecord | null>;
@@ -35,6 +36,10 @@ export interface Scheduler {
 const DEFAULT_TICK_INTERVAL_MS = 30_000;
 const DEFAULT_RETRY_DELAY_MS = 5 * 60_000;
 const DEFAULT_FRESH_CHAT_DELAY_MS = 10_000;
+const ACTIVITY_LOOKBACK_ROUNDS = 3;
+const ACTIVITY_PARTICIPANT_THRESHOLD = 2;
+const ACTIVITY_MULTIPLIER = 2;
+const ACTIVITY_MAX_MULTIPLIER = 4;
 
 export class DefaultScheduler implements Scheduler {
   private readonly now: () => number;
@@ -160,7 +165,8 @@ export class DefaultScheduler implements Scheduler {
       if (chat) {
         const expiresAt = Date.parse(activePoll.expiresAt);
         if (!Number.isNaN(expiresAt)) {
-          return expiresAt + chat.questionInterval * 1000;
+          const intervalMs = await this.effectiveIntervalMs(chat);
+          return this.adjustForQuietHours(chat, expiresAt + intervalMs);
         }
       }
     }
@@ -173,7 +179,8 @@ export class DefaultScheduler implements Scheduler {
       if (chat) {
         const expiresAt = Date.parse(active[0]!.expiresAt);
         if (!Number.isNaN(expiresAt)) {
-          return expiresAt + chat.questionInterval * 1000;
+          const intervalMs = await this.effectiveIntervalMs(chat);
+          return this.adjustForQuietHours(chat, expiresAt + intervalMs);
         }
       }
     }
@@ -210,16 +217,18 @@ export class DefaultScheduler implements Scheduler {
       if (lastPublished === 0) {
         delayMs = this.freshChatDelayMs;
       } else {
-        delayMs = Math.max(0, lastPublished + chat.questionInterval * 1000 - this.now());
+        const intervalMs = await this.effectiveIntervalMs(chat);
+        delayMs = Math.max(0, lastPublished + intervalMs - this.now());
       }
     }
 
-    const publishAtMs = this.now() + delayMs;
+    const publishAtMs = this.adjustForQuietHours(chat, this.now() + delayMs);
+    const adjustedDelayMs = Math.max(0, publishAtMs - this.now());
     const timer = setTimeout(() => {
       this.publishTimers.delete(chat.chatId);
       this.publishAt.delete(chat.chatId);
       void this.runPublish(chat);
-    }, delayMs);
+    }, adjustedDelayMs);
     if (typeof timer.unref === 'function') timer.unref();
     this.publishTimers.set(chat.chatId, timer);
     this.publishAt.set(chat.chatId, publishAtMs);
@@ -282,8 +291,51 @@ export class DefaultScheduler implements Scheduler {
     this.activePolls.delete(poll.chatId);
     const chat = await this.deps.store.chats.get(poll.chatId);
     if (chat?.enabled) {
-      await this.scheduleNextPublish(chat, chat.questionInterval * 1000);
+      await this.scheduleNextPublish(chat);
     }
+  }
+
+  private adjustForQuietHours(chat: ChatConfig, publishAtMs: number): number {
+    if (!chat.quietHoursEnabled) return publishAtMs;
+    const localMinutes = localMinutesFromUtc(publishAtMs, chat.timezoneOffsetMinutes);
+    const delayUntilEnd = minutesUntilIntervalEnd(
+      localMinutes,
+      chat.quietHoursStart,
+      chat.quietHoursEnd,
+    );
+    if (delayUntilEnd === 0) return publishAtMs;
+    return publishAtMs + delayUntilEnd * 60_000;
+  }
+
+  private async effectiveIntervalMs(chat: ChatConfig): Promise<number> {
+    const multiplier = await this.activityMultiplier(chat.chatId);
+    return chat.questionInterval * 1000 * multiplier;
+  }
+
+  private async activityMultiplier(chatId: string): Promise<number> {
+    const average = await this.averageParticipants(chatId);
+    if (average < ACTIVITY_PARTICIPANT_THRESHOLD / 2) return ACTIVITY_MAX_MULTIPLIER;
+    if (average < ACTIVITY_PARTICIPANT_THRESHOLD) return ACTIVITY_MULTIPLIER;
+    return 1;
+  }
+
+  private async averageParticipants(chatId: string): Promise<number> {
+    const polls = await this.deps.store.polls.find(
+      (p) => p.chatId === chatId && (p.status === 'completed' || p.status === 'expired'),
+    );
+    const sorted = [...polls].sort(
+      (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+    );
+    const recent = sorted.slice(0, ACTIVITY_LOOKBACK_ROUNDS);
+    if (recent.length === 0) return ACTIVITY_PARTICIPANT_THRESHOLD;
+    const totals: number[] = [];
+    for (const poll of recent) {
+      const answers = await this.deps.store.answers.find(
+        (a) => a.chatId === chatId && a.telegramPollId === poll.telegramPollId,
+      );
+      totals.push(new Set(answers.map((a) => a.userId)).size);
+    }
+    return totals.reduce((sum, n) => sum + n, 0) / totals.length;
   }
 
   getTimersInfo(): { pollTimers: number; publishTimers: number } {

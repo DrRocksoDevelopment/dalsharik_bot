@@ -187,4 +187,47 @@ describe('config-commands', () => {
     await h.bot.handleUpdate(commandUpdate('/set_finalization static', { fromId: 999 }));
     expect(lastReply(h)).toBe(MESSAGES.notAdmin);
   });
+
+  it('/set_quiet_hours включает тихие часы', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_quiet_hours 23:00 09:00', { fromId: ADMIN_ID }));
+    const chat = (await h.store.chats.get('-100123'))!;
+    expect(chat.quietHoursEnabled).toBe(true);
+    expect(chat.quietHoursStart).toBe(1380);
+    expect(chat.quietHoursEnd).toBe(540);
+    expect(lastReply(h)).toBe(MESSAGES.quietHoursSet('23:00–09:00'));
+  });
+
+  it('/set_quiet_hours off выключает тихие часы', async () => {
+    h = await setup();
+    await h.store.chats.update('-100123', {
+      quietHoursEnabled: true,
+      quietHoursStart: 1380,
+      quietHoursEnd: 540,
+    });
+    await h.bot.handleUpdate(commandUpdate('/set_quiet_hours off', { fromId: ADMIN_ID }));
+    const chat = (await h.store.chats.get('-100123'))!;
+    expect(chat.quietHoursEnabled).toBe(false);
+    expect(lastReply(h)).toBe(MESSAGES.quietHoursOff);
+  });
+
+  it('/set_quiet_hours с неверным форматом отклоняется', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_quiet_hours 25:00 09:00', { fromId: ADMIN_ID }));
+    expect(lastReply(h)).toBe(MESSAGES.invalidQuietHours);
+    expect((await h.store.chats.get('-100123'))?.quietHoursEnabled).toBe(false);
+  });
+
+  it('/set_quiet_hours с равными временами отклоняется', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_quiet_hours 08:00 08:00', { fromId: ADMIN_ID }));
+    expect(lastReply(h)).toBe(MESSAGES.invalidQuietHours);
+  });
+
+  it('/set_quiet_hours отклоняет не-админа', async () => {
+    h = await setup();
+    await h.bot.handleUpdate(commandUpdate('/set_quiet_hours 23:00 09:00', { fromId: 999 }));
+    expect(lastReply(h)).toBe(MESSAGES.notAdmin);
+    expect((await h.store.chats.get('-100123'))?.quietHoursEnabled).toBe(false);
+  });
 });

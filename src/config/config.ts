@@ -31,6 +31,9 @@ export const DEFAULT_CONFIG = {
   timezoneOffsetMinutes: 180,
   finalization: 'ai',
   subscription: false,
+  quietHoursEnabled: true,
+  quietHoursStart: 0,
+  quietHoursEnd: 480,
 } as const;
 
 export const LEGACY_DEFAULT_QUESTION_TYPES = ['historical_next_event'] as const;

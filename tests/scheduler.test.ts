@@ -20,6 +20,9 @@ function makeChat(chatId: string, overrides: Partial<ChatConfig> = {}): ChatReco
     difficultyMin: 1,
     difficultyMax: 5,
     timezoneOffsetMinutes: 180,
+    quietHoursEnabled: false,
+    quietHoursStart: 0,
+    quietHoursEnd: 0,
     finalization: 'ai',
     subscription: false,
     createdAt: new Date().toISOString(),
@@ -357,6 +360,100 @@ describe('scheduler', () => {
     await scheduler.start();
 
     expect(await scheduler.getNextPublishAt('-100123')).toBeNull();
+
+    await scheduler.stop();
+  });
+
+  it('сдвигает публикацию за пределы тихих часов при активном poll', async () => {
+    await t.store.chats.insert(
+      makeChat('-100123', {
+        questionInterval: 3600,
+        quietHoursEnabled: true,
+        quietHoursStart: 60,
+        quietHoursEnd: 300,
+      }),
+    );
+    const now = Date.parse('2026-08-09T00:00:00.000Z');
+    await t.store.polls.insert({
+      id: 'qh',
+      telegramPollId: 'tg-qh',
+      chatId: '-100123',
+      questionId: 'event_000001',
+      messageId: 1,
+      optionMap: [0, 1, 2, 3],
+      createdAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + 1000).toISOString(),
+      status: 'active',
+    });
+    const { publisher } = makePublisher(t.store, []);
+    const { finalizer } = makeFinalizer(t.store);
+
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      now: () => now,
+    });
+    await scheduler.start();
+
+    expect(await scheduler.getNextPublishAt('-100123')).toBe(Date.parse('2026-08-09T02:00:01.000Z'));
+
+    await scheduler.stop();
+  });
+
+  it('сдвигает старт публикации свежего чата, если он выпадает на тихие часы', async () => {
+    await t.store.chats.insert(
+      makeChat('-100123', {
+        quietHoursEnabled: true,
+        quietHoursStart: 60,
+        quietHoursEnd: 300,
+      }),
+    );
+    const { publisher } = makePublisher(t.store, []);
+    const { finalizer } = makeFinalizer(t.store);
+
+    const now = Date.parse('2026-08-09T00:00:00.000Z');
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      now: () => now,
+      freshChatDelayMs: 60_000,
+    });
+    await scheduler.start();
+    await scheduler.scheduleChat('-100123');
+
+    expect(await scheduler.getNextPublishAt('-100123')).toBe(Date.parse('2026-08-09T02:00:00.000Z'));
+
+    await scheduler.stop();
+  });
+
+  it('не сдвигает публикацию вне тихих часов', async () => {
+    await t.store.chats.insert(
+      makeChat('-100123', {
+        quietHoursEnabled: true,
+        quietHoursStart: 480,
+        quietHoursEnd: 900,
+      }),
+    );
+    const { publisher } = makePublisher(t.store, []);
+    const { finalizer } = makeFinalizer(t.store);
+
+    const now = Date.parse('2026-08-09T00:00:00.000Z');
+    const scheduler = new DefaultScheduler({
+      logger: makeLogger(),
+      store: t.store,
+      publisher,
+      finalizer,
+      now: () => now,
+      freshChatDelayMs: 3_600_000,
+    });
+    await scheduler.start();
+    await scheduler.scheduleChat('-100123');
+
+    expect(await scheduler.getNextPublishAt('-100123')).toBe(now + 3_600_000);
 
     await scheduler.stop();
   });

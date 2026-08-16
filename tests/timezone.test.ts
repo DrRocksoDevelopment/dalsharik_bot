@@ -6,7 +6,7 @@ import {
   localHourFromUtc,
   normalizeOffsetMinutes,
 } from '../src/game/time-of-day.js';
-import { formatTimezoneOffset, formatLocalTime, parseTimezoneOffset, formatRelativeDuration } from '../src/utils/timezone.js';
+import { formatTimezoneOffset, formatLocalTime, parseTimezoneOffset, formatRelativeDuration, isInInterval, minutesUntilIntervalEnd, localMinutesFromUtc } from '../src/utils/timezone.js';
 
 describe('parseTimezoneOffset', () => {
   it('парсит часы со знаком', () => {
@@ -86,6 +86,58 @@ describe('time of day', () => {
     const utcMorning = Date.parse('2026-08-09T05:00:00.000Z');
     expect(effectiveDifficultyRange(utcMorning, 180, 1, 5)).toEqual({ min: 1, max: 2 });
     expect(effectiveDifficultyRange(utcMorning, 180, 4, 5)).toEqual({ min: 4, max: 5 });
+  });
+});
+
+describe('localMinutesFromUtc', () => {
+  it('считает локальные минуты суток по UTC и смещению', () => {
+    const utc = Date.parse('2026-08-09T00:00:00.000Z');
+    expect(localMinutesFromUtc(utc, 180)).toBe(180);
+    expect(localMinutesFromUtc(utc, -60)).toBe(1380);
+    expect(localMinutesFromUtc(utc, 780)).toBe(780);
+  });
+});
+
+describe('isInInterval', () => {
+  it('простой интервал без перехода через полночь', () => {
+    expect(isInInterval(10, 0, 60)).toBe(true);
+    expect(isInInterval(0, 0, 60)).toBe(true);
+    expect(isInInterval(59, 0, 60)).toBe(true);
+    expect(isInInterval(60, 0, 60)).toBe(false);
+    expect(isInInterval(120, 0, 60)).toBe(false);
+  });
+
+  it('интервал через полночь', () => {
+    expect(isInInterval(1380, 1380, 480)).toBe(true);
+    expect(isInInterval(240, 1380, 480)).toBe(true);
+    expect(isInInterval(479, 1380, 480)).toBe(true);
+    expect(isInInterval(480, 1380, 480)).toBe(false);
+    expect(isInInterval(600, 1380, 480)).toBe(false);
+    expect(isInInterval(1379, 1380, 480)).toBe(false);
+  });
+
+  it('нулевой интервал неактивен', () => {
+    expect(isInInterval(0, 0, 0)).toBe(false);
+    expect(isInInterval(500, 500, 500)).toBe(false);
+  });
+});
+
+describe('minutesUntilIntervalEnd', () => {
+  it('возвращает 0 вне интервала', () => {
+    expect(minutesUntilIntervalEnd(600, 0, 480)).toBe(0);
+    expect(minutesUntilIntervalEnd(0, 0, 0)).toBe(0);
+  });
+
+  it('простой интервал', () => {
+    expect(minutesUntilIntervalEnd(10, 0, 60)).toBe(50);
+    expect(minutesUntilIntervalEnd(0, 0, 60)).toBe(60);
+    expect(minutesUntilIntervalEnd(59, 0, 60)).toBe(1);
+  });
+
+  it('интервал через полночь', () => {
+    expect(minutesUntilIntervalEnd(1380, 1380, 480)).toBe(540);
+    expect(minutesUntilIntervalEnd(240, 1380, 480)).toBe(240);
+    expect(minutesUntilIntervalEnd(479, 1380, 480)).toBe(1);
   });
 });
 

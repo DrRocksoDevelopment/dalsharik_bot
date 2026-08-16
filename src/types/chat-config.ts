@@ -42,6 +42,9 @@ export interface ChatConfig {
   timezoneOffsetMinutes: number;
   finalization: FinalizationMode;
   subscription: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart: number;
+  quietHoursEnd: number;
 }
 
 export function defaultChatConfig(chatId: string): ChatConfig {
@@ -57,6 +60,9 @@ export function defaultChatConfig(chatId: string): ChatConfig {
     timezoneOffsetMinutes: DEFAULT_CONFIG.timezoneOffsetMinutes,
     finalization: DEFAULT_CONFIG.finalization,
     subscription: DEFAULT_CONFIG.subscription,
+    quietHoursEnabled: DEFAULT_CONFIG.quietHoursEnabled,
+    quietHoursStart: DEFAULT_CONFIG.quietHoursStart,
+    quietHoursEnd: DEFAULT_CONFIG.quietHoursEnd,
   };
 }
 
@@ -74,6 +80,9 @@ export function isValidChatConfig(cfg: unknown): cfg is ChatConfig {
     typeof c.difficultyMax === 'number' &&
     (typeof c.timezoneOffsetMinutes === 'number' || c.timezoneOffsetMinutes === undefined) &&
     (c.finalization === 'ai' || c.finalization === 'static' || c.finalization === undefined) &&
-    (typeof c.subscription === 'boolean' || c.subscription === undefined)
+    (typeof c.subscription === 'boolean' || c.subscription === undefined) &&
+    (typeof c.quietHoursEnabled === 'boolean' || c.quietHoursEnabled === undefined) &&
+    (typeof c.quietHoursStart === 'number' || c.quietHoursStart === undefined) &&
+    (typeof c.quietHoursEnd === 'number' || c.quietHoursEnd === undefined)
   );
 }
