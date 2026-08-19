@@ -4,6 +4,7 @@ import type { PollRecord } from '../game/poll.js';
 import type { ChatConfig } from '../types/index.js';
 import type { ChatRecord } from '../game/chat.js';
 import { localMinutesFromUtc, minutesUntilIntervalEnd } from '../utils/timezone.js';
+import { effectiveIntervalMs } from './activity.js';
 
 export interface PollPublisher {
   publish(chat: ChatConfig): Promise<PollRecord | null>;
@@ -36,10 +37,6 @@ export interface Scheduler {
 const DEFAULT_TICK_INTERVAL_MS = 30_000;
 const DEFAULT_RETRY_DELAY_MS = 5 * 60_000;
 const DEFAULT_FRESH_CHAT_DELAY_MS = 10_000;
-const ACTIVITY_LOOKBACK_ROUNDS = 3;
-const ACTIVITY_PARTICIPANT_THRESHOLD = 2;
-const ACTIVITY_MULTIPLIER = 2;
-const ACTIVITY_MAX_MULTIPLIER = 4;
 
 export class DefaultScheduler implements Scheduler {
   private readonly now: () => number;
@@ -308,34 +305,7 @@ export class DefaultScheduler implements Scheduler {
   }
 
   private async effectiveIntervalMs(chat: ChatConfig): Promise<number> {
-    const multiplier = await this.activityMultiplier(chat.chatId);
-    return chat.questionInterval * 1000 * multiplier;
-  }
-
-  private async activityMultiplier(chatId: string): Promise<number> {
-    const average = await this.averageParticipants(chatId);
-    if (average < ACTIVITY_PARTICIPANT_THRESHOLD / 2) return ACTIVITY_MAX_MULTIPLIER;
-    if (average < ACTIVITY_PARTICIPANT_THRESHOLD) return ACTIVITY_MULTIPLIER;
-    return 1;
-  }
-
-  private async averageParticipants(chatId: string): Promise<number> {
-    const polls = await this.deps.store.polls.find(
-      (p) => p.chatId === chatId && (p.status === 'completed' || p.status === 'expired'),
-    );
-    const sorted = [...polls].sort(
-      (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
-    );
-    const recent = sorted.slice(0, ACTIVITY_LOOKBACK_ROUNDS);
-    if (recent.length === 0) return ACTIVITY_PARTICIPANT_THRESHOLD;
-    const totals: number[] = [];
-    for (const poll of recent) {
-      const answers = await this.deps.store.answers.find(
-        (a) => a.chatId === chatId && a.telegramPollId === poll.telegramPollId,
-      );
-      totals.push(new Set(answers.map((a) => a.userId)).size);
-    }
-    return totals.reduce((sum, n) => sum + n, 0) / totals.length;
+    return effectiveIntervalMs(this.deps.store, chat.chatId, chat.questionInterval);
   }
 
   getTimersInfo(): { pollTimers: number; publishTimers: number } {

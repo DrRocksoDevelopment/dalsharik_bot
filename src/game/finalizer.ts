@@ -13,6 +13,7 @@ import { SloganEngine, type SloganContext } from '../content/slogans.js';
 import type { FinalizerSender } from '../telegram/finalizer-sender.js';
 import type { MetricsStore } from '../metrics/metrics.js';
 import { formatLocalTime } from '../utils/timezone.js';
+import { effectiveIntervalMs } from '../scheduler/activity.js';
 import { buildMessageLink } from '../utils/message-link.js';
 import { getOrCreateChat } from '../bot/chat-utils.js';
 import { MESSAGES } from '../content/messages.js';
@@ -153,9 +154,12 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
     const now = (this.deps.now ?? Date.now)();
     const timezoneOffset =
       chat?.timezoneOffsetMinutes ?? DEFAULT_CONFIG.timezoneOffsetMinutes;
+    const effectiveInterval = chat
+      ? await effectiveIntervalMs(this.deps.store, chat.chatId, chat.questionInterval)
+      : undefined;
     const nextEventLocalTime =
-      chat && Number.isFinite(timezoneOffset)
-        ? formatLocalTime(now + chat.questionInterval * 1000, timezoneOffset)
+      chat && Number.isFinite(timezoneOffset) && effectiveInterval !== undefined
+        ? formatLocalTime(now + effectiveInterval, timezoneOffset)
         : undefined;
 
     const hostCtx: HostContext = {
