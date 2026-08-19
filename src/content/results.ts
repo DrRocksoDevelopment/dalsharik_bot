@@ -19,6 +19,7 @@ export interface ResultsContext {
   results: QuestionResults;
   users: Map<string, UserProfile>;
   slogan: string;
+  optionMap?: number[];
   streakHighlights?: StreakHighlight[];
   chatStreakRecord?: number | null;
   nextEventLocalTime?: string;
@@ -27,6 +28,7 @@ export interface ResultsContext {
 
 export interface EmptyResultsContext {
   question: Question;
+  optionMap?: number[];
   nextEventLocalTime?: string;
   messageLink?: string;
 }
@@ -36,7 +38,7 @@ function messageLinkLine(messageLink?: string): string {
 }
 
 export function buildEmptyResultsMessage(context: EmptyResultsContext): string {
-  const { question, nextEventLocalTime } = context;
+  const { question, optionMap, nextEventLocalTime } = context;
   const parts: string[] = [];
 
   const link = messageLinkLine(context.messageLink);
@@ -44,7 +46,7 @@ export function buildEmptyResultsMessage(context: EmptyResultsContext): string {
 
   parts.push('🙊 Никто не ответил.');
   parts.push('');
-  parts.push(`✅ ${formatCorrectAnswer(question)}`);
+  parts.push(`✅ ${formatCorrectAnswer(question, optionMap)}`);
   parts.push('');
   parts.push('📖 А на самом деле...');
   parts.push('');
@@ -66,10 +68,11 @@ export function buildEmptyResultsMessage(context: EmptyResultsContext): string {
 export function buildShowSummaryMessage(context: {
   question: Question;
   results: QuestionResults;
+  optionMap?: number[];
   nextEventLocalTime?: string;
   messageLink?: string;
 }): string {
-  const { question, results, nextEventLocalTime } = context;
+  const { question, results, optionMap, nextEventLocalTime } = context;
   const parts: string[] = [];
 
   const link = messageLinkLine(context.messageLink);
@@ -80,9 +83,9 @@ export function buildShowSummaryMessage(context: {
   parts.push(`Ответили: ${results.totalPlayers}`);
   parts.push('');
   parts.push('Варианты:');
-  parts.push(formatDistribution(results, question));
+  parts.push(formatDistribution(results, question, optionMap));
   parts.push('');
-  parts.push(`✅ ${formatCorrectAnswer(question)}`);
+  parts.push(`✅ ${formatCorrectAnswer(question, optionMap)}`);
 
   if (question.sources.length > 0) {
     parts.push('');
@@ -97,22 +100,26 @@ export function buildShowSummaryMessage(context: {
   return parts.join('\n');
 }
 
-function formatDistribution(results: QuestionResults, question: Question): string {
+function formatDistribution(results: QuestionResults, question: Question, optionMap?: number[]): string {
   const lines: string[] = [];
-  for (let i = 0; i < question.answers.length; i += 1) {
-    const answer = question.answers[i]!;
-    const letter = String.fromCharCode(65 + i);
+  const map = optionMap ?? question.answers.map((_, i) => i);
+  for (let pollPos = 0; pollPos < map.length; pollPos += 1) {
+    const answerIdx = map[pollPos]!;
+    const answer = question.answers[answerIdx]!;
+    const letter = String.fromCharCode(65 + pollPos);
     const marker = answer.correct ? '🟢' : '🔴';
-    lines.push(`${marker} ${letter} — ${results.answerDistribution[String(i)] ?? 0}`);
+    lines.push(`${marker} ${letter} — ${results.answerDistribution[String(answerIdx)] ?? 0}`);
   }
   return lines.join('\n');
 }
 
-function formatCorrectAnswer(question: Question): string {
-  const idx = question.answers.findIndex((a) => a.correct);
-  if (idx === -1) return 'Правильный ответ: не указан';
-  const letter = String.fromCharCode(65 + idx);
-  return `Правильный ответ: ${letter} — ${question.answers[idx]!.text}`;
+function formatCorrectAnswer(question: Question, optionMap?: number[]): string {
+  const correctIdx = question.answers.findIndex((a) => a.correct);
+  if (correctIdx === -1) return 'Правильный ответ: не указан';
+  const map = optionMap ?? question.answers.map((_, i) => i);
+  const pollPos = map.indexOf(correctIdx);
+  const letter = String.fromCharCode(65 + (pollPos === -1 ? correctIdx : pollPos));
+  return `Правильный ответ: ${letter} — ${question.answers[correctIdx]!.text}`;
 }
 
 function formatTopPlayers(results: QuestionResults, users: Map<string, UserProfile>): string {
@@ -144,7 +151,7 @@ function formatStreaks(
 }
 
 export function buildResultsMessage(context: ResultsContext): string {
-  const { question, results, users, slogan } = context;
+  const { question, results, users, slogan, optionMap } = context;
   const parts: string[] = [];
 
   const link = messageLinkLine(context.messageLink);
@@ -168,7 +175,7 @@ export function buildResultsMessage(context: ResultsContext): string {
   }
 
   parts.push('Варианты:');
-  parts.push(formatDistribution(results, question));
+  parts.push(formatDistribution(results, question, optionMap));
   parts.push('');
 
   const top = formatTopPlayers(results, users);

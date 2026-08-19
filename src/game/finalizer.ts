@@ -46,6 +46,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
     question: import('./question.js').Question;
     results: import('./stats.js').QuestionResults;
     users: Map<string, import('./user.js').UserProfile>;
+    optionMap?: number[];
     streakHighlights: { userId: string; currentStreak: number }[];
     chatStreakRecord: number | null;
     nextEventLocalTime?: string;
@@ -55,6 +56,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       question: context.question,
       results: context.results,
       users: context.users,
+      optionMap: context.optionMap,
       slogan: (this.deps.slogans ?? new SloganEngine()).get({
         isCorrect: context.results.correct > 0,
         playersCount: context.results.totalPlayers,
@@ -160,6 +162,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       question,
       results,
       users,
+      optionMap: stored.optionMap,
       streakHighlights,
       chatStreakRecord,
       nextEventLocalTime,
@@ -174,7 +177,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
       await this.publish(
         stored.chatId,
         this.withRatingPrompt(
-          buildEmptyResultsMessage({ question, nextEventLocalTime, messageLink }),
+          buildEmptyResultsMessage({ question, optionMap: stored.optionMap, nextEventLocalTime, messageLink }),
           ratingMarkup,
         ),
         questionMessageId,
@@ -187,7 +190,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
         await this.publish(
           stored.chatId,
           this.withRatingPrompt(
-            buildShowSummaryMessage({ question, results, nextEventLocalTime, messageLink }),
+            buildShowSummaryMessage({ question, results, optionMap: stored.optionMap, nextEventLocalTime, messageLink }),
             ratingMarkup,
           ),
           questionMessageId,
@@ -197,7 +200,7 @@ export class DefaultQuestionFinalizer implements QuestionFinalizer {
         await this.publish(
           stored.chatId,
           this.withRatingPrompt(
-            this.staticCard({ question, results, users, streakHighlights, chatStreakRecord, nextEventLocalTime, messageLink }),
+            this.staticCard({ question, results, users, optionMap: stored.optionMap, streakHighlights, chatStreakRecord, nextEventLocalTime, messageLink }),
             ratingMarkup,
           ),
           questionMessageId,

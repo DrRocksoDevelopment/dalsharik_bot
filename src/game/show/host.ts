@@ -26,6 +26,7 @@ export interface HostContext {
   question: Question;
   results: QuestionResults;
   users: Map<string, UserProfile>;
+  optionMap?: number[];
   streakHighlights?: StreakHighlight[];
   chatStreakRecord?: number | null;
   nextEventLocalTime?: string;
@@ -41,7 +42,8 @@ function displayName(user: UserProfile | undefined, userId: string): string {
 }
 
 export function buildHostPrompt(ctx: HostContext, instruction: string = DEFAULT_HOST_PROMPT): string {
-  const { question, results, users } = ctx;
+  const { question, results, users, optionMap } = ctx;
+  const map = optionMap ?? question.answers.map((_, i) => i);
   const parts: string[] = [];
 
   parts.push(`Чат: ${ctx.chatTitle ?? 'наш чат'}`);
@@ -49,12 +51,13 @@ export function buildHostPrompt(ctx: HostContext, instruction: string = DEFAULT_
   parts.push(`Контекст: ${question.event.context}`);
   parts.push(`Вопрос: ${question.question}`);
   parts.push(
-    `Варианты:\n${question.answers.map((a, i) => `- ${String.fromCharCode(65 + i)}. ${a.text}`).join('\n')}`,
+    `Варианты:\n${map.map((ansIdx, pollPos) => `- ${String.fromCharCode(65 + pollPos)}. ${question.answers[ansIdx]!.text}`).join('\n')}`,
   );
   const correctIdx = question.answers.findIndex((a) => a.correct);
   const correct = correctIdx === -1 ? undefined : question.answers[correctIdx];
+  const correctPollPos = map.indexOf(correctIdx);
   parts.push(
-    `Правильный ответ: ${correctIdx === -1 ? '—' : String.fromCharCode(65 + correctIdx)}${correct ? ` — ${correct.text}` : ''}`,
+    `Правильный ответ: ${correctIdx === -1 ? '—' : String.fromCharCode(65 + (correctPollPos === -1 ? correctIdx : correctPollPos))}${correct ? ` — ${correct.text}` : ''}`,
   );
   parts.push(`Объяснение: ${question.explanation}`);
   parts.push('');
@@ -63,7 +66,7 @@ export function buildHostPrompt(ctx: HostContext, instruction: string = DEFAULT_
     `Ответили: ${results.totalPlayers}; правильно: ${results.correct}; неверно: ${results.wrong}; точность: ${results.accuracy.toFixed(1)}%`,
   );
   parts.push(
-    `Распределение:\n${question.answers.map((a, i) => `- ${String.fromCharCode(65 + i)}. ${results.answerDistribution[String(i)] ?? 0}`).join('\n')}`,
+    `Распределение:\n${map.map((ansIdx, pollPos) => `- ${String.fromCharCode(65 + pollPos)}. ${results.answerDistribution[String(ansIdx)] ?? 0}`).join('\n')}`,
   );
   if (results.topPlayers.length > 0) {
     parts.push(

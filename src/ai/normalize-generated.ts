@@ -2,7 +2,6 @@ import type { Category, QuestionType } from '../types/index.js';
 import { isQuestionType } from '../types/index.js';
 import { DEFAULT_CONFIG } from '../config/config.js';
 import type { Question, QuestionAnswer } from '../game/question.js';
-import { shuffle } from '../utils/shuffle.js';
 import type { NormalizeResult } from './types.js';
 
 const CATEGORIES = DEFAULT_CONFIG.categories as readonly Category[];
@@ -123,7 +122,7 @@ export function sanitizeGeneratedQuestion(
     eventDate,
     event: { title: eventTitle, context: eventContext },
     question: questionText,
-    answers: shuffle(cleanAnswers),
+    answers: cleanAnswers,
     explanation,
     sources: sources.map((s) => (s as string).trim()),
     createdAt: now,
