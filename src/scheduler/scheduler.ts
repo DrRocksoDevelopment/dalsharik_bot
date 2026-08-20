@@ -199,6 +199,8 @@ export class DefaultScheduler implements Scheduler {
     if (!this.running) return;
     if (this.publishTimers.has(chat.chatId)) return;
 
+    this.publishTimers.set(chat.chatId, null as unknown as NodeJS.Timeout);
+
     let delayMs = overrideDelayMs;
     if (delayMs === undefined) {
       let lastPublished = this.lastPublished.get(chat.chatId);
@@ -237,11 +239,14 @@ export class DefaultScheduler implements Scheduler {
       const fresh = await this.deps.store.chats.get(chat.chatId);
       if (!fresh?.enabled) return;
 
+      this.publishTimers.set(chat.chatId, null as unknown as NodeJS.Timeout);
+
       this.deps.logger.debug('Публикация вопроса', { chatId: chat.chatId });
       const poll = await this.deps.publisher.publish(chat);
       if (poll) {
         const publishedAt = Date.parse(poll.createdAt);
         if (!Number.isNaN(publishedAt)) this.lastPublished.set(chat.chatId, publishedAt);
+        this.publishTimers.delete(chat.chatId);
         this.activePolls.set(chat.chatId, poll);
         const delay = Math.max(0, Date.parse(poll.expiresAt) - this.now());
         this.schedulePollClose(poll, delay);
@@ -251,12 +256,14 @@ export class DefaultScheduler implements Scheduler {
       this.deps.logger.warn('Нет вопросов для публикации, повторная попытка', {
         chatId: chat.chatId,
       });
+      this.publishTimers.delete(chat.chatId);
       await this.scheduleNextPublish(chat, this.retryDelayMs);
     } catch (err) {
       this.deps.logger.error('Ошибка публикации вопроса', {
         chatId: chat.chatId,
         error: err instanceof Error ? err.message : String(err),
       });
+      this.publishTimers.delete(chat.chatId);
       await this.scheduleNextPublish(chat, this.retryDelayMs);
     }
   }
